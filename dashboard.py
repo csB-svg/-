@@ -3,7 +3,9 @@ import pandas as pd
 import streamlit as st  # 필요에 따라 업비트 연동 라이브러리 (pyupbit 등) 추가 가능
 
 # 페이지 기본 설정 (모바일에서도 보기 좋게 넓은 레이아웃 사용)
-st.set_page_title("퀀트 자동 매매 대시보드", page_icon="📈", layout="wide")
+st.set_page_config(
+    page_title="퀀트 자동 매매 대시보드", page_icon="📈", layout="wide"
+)
 
 st.title("🚀 퀀트 자동 매매 실시간 대시보드")
 st.markdown("---")
