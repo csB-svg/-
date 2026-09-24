@@ -1,6 +1,6 @@
 from datetime import datetime
 import pandas as pd
-import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 # 페이지 기본 설정
@@ -79,7 +79,7 @@ st.progress(progress_ratio)
 
 st.markdown("---")
 
-# --- [5. 코인별 & 타임프레임별 Plotly 차트 (변동성 극대화)] ---
+# --- [5. 캔들스틱 차트 & 이평선 & 매수 타점 시각화] ---
 st.subheader("📊 코인별 캔들 차트 & 봇 진입 타점 시각화")
 
 timeframe = st.selectbox(
@@ -91,40 +91,99 @@ tab_btc, tab_eth, tab_xrp, tab_sol, tab_ada = st.tabs(
 )
 
 
-# Plotly 차트 생성 함수 (Y축을 데이터 범위에 딱 맞춰 변동성이 잘 보이게 함)
-def draw_chart(prices, coin_name):
-  df = pd.DataFrame({"가격": prices})
-  fig = px.line(
-      df,
-      y="가격",
-      markers=True,
-      title=f"{coin_name} 최근 {timeframe} 흐름",
+def draw_candlestick_chart(coin_name, base_price):
+  # 예시용 캔들 데이터 생성 (시가, 고가, 저가, 종가)
+  dates = [
+      "09-21 15:00",
+      "09-21 23:00",
+      "09-22 07:00",
+      "09-22 15:00",
+      "09-22 23:00",
+      "09-23 07:00",
+      "09-23 15:00",
+      "09-23 23:00",
+      "09-24 07:00",
+  ]
+  n = len(dates)
+
+  # 가격 변동 시뮬레이션
+  opens = [
+      base_price * (1 + (i * 0.001)) for i in range(n)
+  ]  # pylint: disable=unused-variable
+  closes = [p * (1 + 0.002 * (i % 2 - 0.5)) for i, p in enumerate(opens)]
+  highs = [
+      max(o, c) * 1.004 for o, c in zip(opens, closes)
+  ]  # pylint: disable=unused-variable
+  lows = [min(o, c) * 0.996 for o, c in zip(opens, closes)]  # pylint: disable=unused-variable
+
+  # 이동평균선(오렌지색 선) 계산용 임시 데이터
+  df = pd.DataFrame({"Open": opens, "High": highs, "Low": lows, "Close": closes})
+  df["MA"] = df["Close"].rolling(window=3, min_periods=1).mean()
+
+  fig = go.Figure()
+
+  # 1. 캔들스틱 추가
+  fig.add_trace(
+      go.Candlestick(
+          x=dates,
+          open=df["Open"],
+          high=df["High"],
+          low=df["Low"],
+          close=df["Close"],
+          name=f"{timeframe} 캔들",
+      )
   )
+
+  # 2. 단기 이평선(오렌지색) 추가
+  fig.add_trace(
+      go.Scatter(
+          x=dates,
+          y=df["MA"],
+          mode="lines",
+          name="단기 이평선",
+          line=dict(color="orange", width=2),
+      )
+  )
+
+  # 3. 매수 진입 타점 (초록색 화살표 🎯) 추가 예시
+  buy_x = [dates[2], dates[5]]
+  buy_y = [df["Low"][2] * 0.998, df["Low"][5] * 0.998]
+  fig.add_trace(
+      go.Scatter(
+          x=buy_x,
+          y=buy_y,
+          mode="markers",
+          name="봇 매수 타점",
+          marker=dict(symbol="triangle-up", size=12, color="#00CC96"),
+      )
+  )
+
   fig.update_layout(
-      margin=dict(l=10, r=10, t=30, b=10),
-      height=300,
-      xaxis_title="",
-      yaxis_title="",
+      title=f"{coin_name} 최근 {timeframe} 차트 및 봇 매수 진입 타점",
+      xaxis_title="일시 (월-일 시:분)",
+      yaxis_title="가격 (KRW)",
+      height=450,
+      margin=dict(l=10, r=10, t=40, b=10),
+      xaxis_rangeslider_visible=False,  # 하단 슬라이더 숨김 (깔끔한 UI)
   )
+
   st.plotly_chart(fig, use_container_width=True)
 
 
 with tab_btc:
-  draw_chart(
-      [112000000, 113500000, 114200000, 113800000, 115370000], "BTC"
-  )
+  draw_candlestick_chart("BTC", 114000000)
 
 with tab_eth:
-  draw_chart([3600000, 3650000, 3620000, 3680000, 3686000], "ETH")
+  draw_candlestick_chart("ETH", 3650000)
 
 with tab_xrp:
-  draw_chart([2000, 2030, 2010, 2050, 2071], "XRP")
+  draw_candlestick_chart("XRP", 2050)
 
 with tab_sol:
-  draw_chart([150000, 153000, 152000, 156000, 158000], "SOL")
+  draw_candlestick_chart("SOL", 156000)
 
 with tab_ada:
-  draw_chart([320, 325, 323, 330, 331], "ADA")
+  draw_candlestick_chart("ADA", 328)
 
 st.markdown("---")
 
