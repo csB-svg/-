@@ -1,8 +1,8 @@
 from datetime import datetime
 import pandas as pd
-import streamlit as st  # 필요에 따라 업비트 연동 라이브러리 (pyupbit 등) 추가 가능
+import streamlit as st
 
-# 페이지 기본 설정 (모바일에서도 보기 좋게 넓은 레이아웃 사용)
+# 페이지 기본 설정
 st.set_page_config(
     page_title="퀀트 자동 매매 대시보드", page_icon="📈", layout="wide"
 )
@@ -10,11 +10,14 @@ st.set_page_config(
 st.title("🚀 퀀트 자동 매매 실시간 대시보드")
 st.markdown("---")
 
-# --- [1. 임시 데이터 및 변수 설정 (실제 봇 환경에 맞게 연동하세요)] ---
-# 현재 총 자산 (예시: 현재 1,329,057원)
-current_total_balance = 1329057
-# 한 달 목표 자산 (예시: 2,000,000원)
-monthly_target_balance = 2000000
+# --- [1. 사이드바 및 자산 설정] ---
+st.sidebar.header("⚙️ 봇 자산 및 목표 설정")
+current_total_balance = st.sidebar.number_input(
+    "코인 실제 총 보유자산 (원)", value=1329057, step=10000
+)
+monthly_target_balance = st.sidebar.number_input(
+    "한 달 복리 목표 총자산 (원)", value=2000000, step=10000
+)
 
 # --- [2. 매월 1일 자동 복리 갱신 로직 (Session State 활용)] ---
 now = datetime.now()
@@ -24,12 +27,10 @@ if (
     "base_month" not in st.session_state
     or st.session_state["base_month"] != current_month
 ):
-  # 매월 1일이 되었거나 앱 최초 실행 시, 현재 자산을 이번 달의 새로운 시작 기준금액으로 자동 설정
   st.session_state["base_month"] = current_month
   st.session_state["starting_balance"] = current_total_balance
   st.session_state["start_date"] = now.date()
 
-# 이번 달 기준 시작 자산 가져오기
 starting_balance = st.session_state.get(
     "starting_balance", current_total_balance
 )
@@ -48,7 +49,6 @@ with col2:
   )
 
 with col3:
-  # 이번 달 시작 금액 대비 현재 수익률 계산
   profit_rate = (
       (current_total_balance - starting_balance) / starting_balance
   ) * 100
@@ -65,9 +65,6 @@ st.markdown("---")
 
 # --- [4. 복리 목표 달성률 게이지 및 시각화] ---
 st.subheader("📈 일 복리 및 목표 달성 현황")
-
-# 목표 진행도 계산 (시작 기준금액 대비 현재 자산 / 목표 자산)
-# 0 ~ 100% 사이로 고정
 progress_ratio = min(
     max(
         (current_total_balance - starting_balance)
@@ -76,17 +73,109 @@ progress_ratio = min(
     ),
     1.0,
 )
-
-st.write(
-    f"현재 월간 목표 달성도: **{progress_ratio * 100:.1f}%** (기준일: 조절된"
-    f" 월초)"
-)
+st.write(f"현재 월간 목표 달성도: **{progress_ratio * 100:.1f}%**")
 st.progress(progress_ratio)
 
-# --- [5. 하단 세부 정보 영역] ---
 st.markdown("---")
-st.info(
-    f"💡 **안내**: 매월 1일이 되면 전월 말일의 최종 자산이 새로운 시작 기준으로"
-    f" 자동 갱신되며 일 복리(1~1.5%) 목표 계산이 산뜻하게 재시작됩니다. (현재"
-    f" 접속 환경: 클라우드 실시간 모니터링 중)"
+
+# --- [5. 코인별 1시간봉 차트 및 진입 타점 영역 (모바일에서도 표시)] ---
+st.subheader("📊 5개 코인별 1시간봉 차트 & 봇 진입 타점 시각화")
+
+# 탭을 이용해 모바일에서도 깔끔하게 코인별 차트를 넘겨볼 수 있게 구성
+tab_btc, tab_eth, tab_xrp, tab_sol, tab_ada = st.tabs(
+    ["BTC", "ETH", "XRP", "SOL", "ADA"]
 )
+
+# 예시용 더미 차트 데이터 (실제 봇 데이터프레임으로 연동 가능)
+chart_data = pd.DataFrame(
+    {
+        "가격": [
+            112000000,
+            113500000,
+            114200000,
+            113800000,
+            115370000,
+            114900000,
+            115370000,
+        ]
+    }
+)
+
+with tab_btc:
+  st.markdown("**BTC 최근 1시간봉 흐름**")
+  st.line_chart(chart_data)
+
+with tab_eth:
+  st.markdown("**ETH 최근 1시간봉 흐름**")
+  eth_data = pd.DataFrame({"가격": [3600000, 3650000, 3620000, 3680000, 3686000]})
+  st.line_chart(eth_data)
+
+with tab_xrp:
+  st.markdown("**XRP 최근 1시간봉 흐름**")
+  xrp_data = pd.DataFrame({"가격": [2000, 2030, 2010, 2050, 2071]})
+  st.line_chart(xrp_data)
+
+with tab_sol:
+  st.markdown("**SOL 최근 1시간봉 흐름**")
+  sol_data = pd.DataFrame(
+      {"가격": [150000, 153000, 152000, 156000, 158000]}
+  )
+  st.line_chart(sol_data)
+
+with tab_ada:
+  st.markdown("**ADA 최근 1시간봉 흐름**")
+  ada_data = pd.DataFrame({"가격": [320, 325, 323, 330, 331]})
+  st.line_chart(ada_data)
+
+st.markdown("---")
+
+# --- [6. 날짜별 매도 완료 성과 & 실시간 코인 상태 판] ---
+st.subheader("📅 날짜별 매도 완료 성과 & 복리 자산 캘린더")
+history_df = pd.DataFrame({
+    "매도 완료 날짜": ["2026-09-24"],
+    "시작 자산 (원)": ["1,329,057원"],
+    "실현 손익 (원)": ["0원"],
+    "수익률 (%)": ["+0.0%"],
+    "매도 완료 횟수": ["0회"],
+    "매도 후 총자산 (재투자)": ["1,329,057원"],
+    "상태": ["매도 완료 대기 중"],
+})
+st.dataframe(history_df, use_container_width=True)
+
+st.subheader("📋 실시간 코인 타점 및 전략 분석 판 (전체 5종목)")
+status_df = pd.DataFrame({
+    "코인": ["BTC", "ETH", "XRP", "SOL", "ADA"],
+    "현재가 (원)": [
+        "115,370,000",
+        "3,686,000",
+        "2,071",
+        "158,000",
+        "331",
+    ],
+    "변동성 목표가 (원)": [
+        "117,374,500",
+        "3,752,000",
+        "2,156",
+        "161,250",
+        "344",
+    ],
+    "5일 이평선 (원)": [
+        "115,041,400",
+        "3,688,400",
+        "2,050",
+        "157,560",
+        "328",
+    ],
+    "목표가 대비 차이": ["-1.71%", "-1.76%", "-3.94%", "-2.02%", "-3.64%"],
+    "봇 판단 상태": [
+        "⏳ 목표가 대기 중",
+        "📉 이평선 아래 (관망)",
+        "⏳ 목표가 대기 중",
+        "⏳ 목표가 대기 중",
+        "⏳ 목표가 대기 중",
+    ],
+})
+st.dataframe(status_df, use_container_width=True)
+
+if st.button("🔄 데이터 새로고침"):
+  st.rerun()
