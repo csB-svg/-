@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 
 # 페이지 기본 설정
@@ -79,11 +80,11 @@ st.progress(progress_ratio)
 
 st.markdown("---")
 
-# --- [5. 캔들스틱 차트 & 타임프레임 연동 시간 최적화] ---
-st.subheader("📊 코인별 캔들 차트 & 봇 진입 타점 시각화")
+# --- [5. 거래소 스타일 라인 + 거래량 차트 시각화] ---
+st.subheader("📊 코인별 시세 및 거래량 모니터링 차트")
 
 timeframe = st.selectbox(
-    "⏳ 차트 타임프레임 선택", ["5분봉", "15분봉", "30분봉", "1시간봉", "1일봉"]
+    "⏳ 차트 타임프레임 선택", ["3분봉", "15분봉", "1시간봉", "4시간봉", "1일봉"]
 )
 
 tab_btc, tab_eth, tab_xrp, tab_sol, tab_ada = st.tabs(
@@ -91,99 +92,121 @@ tab_btc, tab_eth, tab_xrp, tab_sol, tab_ada = st.tabs(
 )
 
 
-def draw_candlestick_chart(coin_name, base_price):
+def draw_exchange_chart(coin_name, base_price):
   now_time = datetime.now()
 
-  if timeframe == "5분봉":
-    delta = timedelta(minutes=5)
-    n = 20  # 최근 20개 (약 1시간 40분 분량)
+  if timeframe == "3분봉":
+    delta = timedelta(minutes=3)
+    n = 15
   elif timeframe == "15분봉":
     delta = timedelta(minutes=15)
-    n = 20  # 최근 20개 (약 5시간 분량)
-  elif timeframe == "30분봉":
-    delta = timedelta(minutes=30)
-    n = 20  # 최근 20개 (10시간 분량)
+    n = 15
   elif timeframe == "1시간봉":
     delta = timedelta(hours=1)
-    n = 24  # 최근 24개 (하루 분량)
+    n = 15
+  elif timeframe == "4시간봉":
+    delta = timedelta(hours=4)
+    n = 15
   else:  # 1일봉
     delta = timedelta(days=1)
-    n = 30  # 최근 30일 (한 달 분량)
+    n = 15
 
   dates = [
       (now_time - delta * i).strftime("%m-%d %H:%M") for i in range(n)
   ][::-1]
 
-  opens = [base_price * (1 + (i * 0.0005)) for i in range(n)]
-  closes = [p * (1 + 0.001 * ((i % 3) - 1)) for i, p in enumerate(opens)]
-  highs = [max(o, c) * 1.002 for o, c in zip(opens, closes)]
-  lows = [min(o, c) * 0.998 for o, c in zip(opens, closes)]
+  # 가격 및 거래량 더미 데이터 생성
+  prices = [base_price * (1 + (i * 0.0008) - 0.004) for i in range(n)]
+  volumes = [1000 + (i * 150) % 800 for i in range(n)]
 
-  df = pd.DataFrame({"Open": opens, "High": highs, "Low": lows, "Close": closes})
-  df["MA"] = df["Close"].rolling(window=5, min_periods=1).mean()
+  df = pd.DataFrame({"Price": prices, "Volume": volumes})
+  df["MA5"] = df["Price"].rolling(window=3, min_periods=1).mean()
+  df["MA10"] = df["Price"].rolling(window=5, min_periods=1).mean()
 
-  fig = go.Figure()
-
-  fig.add_trace(
-      go.Candlestick(
-          x=dates,
-          open=df["Open"],
-          high=df["High"],
-          low=df["Low"],
-          close=df["Close"],
-          name=f"{timeframe} 캔들",
-      )
+  # 상단 가격 차트와 하단 거래량 차트를 위아래로 배치 (Make Subplots)
+  fig = make_subplots(
+      rows=2,
+      cols=1,
+      shared_xaxes=True,
+      vertical_spacing=0.03,
+      row_heights=[0.75, 0.25],
   )
 
+  # 1. 상단 가격 라인 차트 & 이평선
   fig.add_trace(
       go.Scatter(
           x=dates,
-          y=df["MA"],
+          y=df["Price"],
+          mode="lines+markers",
+          name="가격",
+          line=dict(color="#2962FF", width=2),
+      ),
+      row=1,
+      col=1,
+  )
+  fig.add_trace(
+      go.Scatter(
+          x=dates,
+          y=df["MA5"],
           mode="lines",
-          name="단기 이평선",
-          line=dict(color="orange", width=2),
-      )
+          name="MA 5",
+          line=dict(color="#FF6D00", width=1.5),
+      ),
+      row=1,
+      col=1,
   )
-
-  buy_x = [dates[5], dates[12]]
-  buy_y = [df["Low"][5] * 0.999, df["Low"][12] * 0.999]
   fig.add_trace(
       go.Scatter(
-          x=buy_x,
-          y=buy_y,
-          mode="markers",
-          name="봇 매수 타점",
-          marker=dict(symbol="triangle-up", size=10, color="#00CC96"),
-      )
+          x=dates,
+          y=df["MA10"],
+          mode="lines",
+          name="MA 10",
+          line=dict(color="#00B0FF", width=1.5),
+      ),
+      row=1,
+      col=1,
+  )
+
+  # 2. 하단 거래량 바 차트
+  fig.add_trace(
+      go.Bar(
+          x=dates,
+          y=df["Volume"],
+          name="거래량",
+          marker_color="rgba(41, 98, 255, 0.6)",
+      ),
+      row=2,
+      col=1,
   )
 
   fig.update_layout(
-      title=f"{coin_name} 최근 {timeframe} 흐름 및 진입 타점",
-      xaxis_title="",
-      yaxis_title="가격 (KRW)",
-      height=400,
+      title=dict(text=f"{coin_name} 실시간 차트 ({timeframe})", font=dict(size=14)),
+      height=450,
       margin=dict(l=10, r=10, t=40, b=10),
-      xaxis_rangeslider_visible=False,
-      xaxis=dict(tickangle=0),
+      showlegend=True,
+      legend=dict(
+          orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
+      ),
+      xaxis2=dict(tickangle=0),
   )
 
   st.plotly_chart(fig, use_container_width=True)
 
 
 with tab_btc:
-  draw_candlestick_chart("BTC", 115000000)
+  draw_exchange_chart("BTC", 115000000)
 
 with tab_eth:
-  draw_candlestick_chart("ETH", 3680000)
+  draw_exchange_chart("ETH", 3680000)
 
 with tab_xrp:
-  draw_candlestick_chart("XRP", 2070)
+  draw_exchange_chart("XRP", 2070)
 
 with tab_sol:
-  draw_candlestick_chart("SOL", 158000)
+  draw_exchange_chart("SOL", 158000)
 
 with tab_ada:
-  draw_candlestick_chart("ADA", 331)
+  draw_exchange_chart("ADA", 331)
 
 st.markdown("---")
 
