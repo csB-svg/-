@@ -1,5 +1,6 @@
 from datetime import datetime
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 # 페이지 기본 설정
@@ -19,7 +20,7 @@ monthly_target_balance = st.sidebar.number_input(
     "한 달 복리 목표 총자산 (원)", value=2000000, step=10000
 )
 
-# --- [2. 매월 1일 자동 복리 갱신 로직 (Session State 활용)] ---
+# --- [2. 매월 1일 자동 복리 갱신 로직] ---
 now = datetime.now()
 current_month = now.month
 
@@ -63,7 +64,7 @@ with col4:
 
 st.markdown("---")
 
-# --- [4. 복리 목표 달성률 게이지 및 시각화] ---
+# --- [4. 복리 목표 달성률 게이지] ---
 st.subheader("📈 일 복리 및 목표 달성 현황")
 progress_ratio = min(
     max(
@@ -78,55 +79,56 @@ st.progress(progress_ratio)
 
 st.markdown("---")
 
-# --- [5. 코인별 & 타임프레임별 차트 시각화] ---
+# --- [5. 코인별 & 타임프레임별 Plotly 차트 (변동성 극대화)] ---
 st.subheader("📊 코인별 캔들 차트 & 봇 진입 타점 시각화")
 
-# 상단에 타임프레임 선택 셀렉트박스 추가 (5분, 15분, 30분, 1시간, 1일)
 timeframe = st.selectbox(
     "⏳ 차트 타임프레임 선택", ["5분봉", "15분봉", "30분봉", "1시간봉", "1일봉"]
 )
 
-# 코인 탭 선택
 tab_btc, tab_eth, tab_xrp, tab_sol, tab_ada = st.tabs(
     ["BTC", "ETH", "XRP", "SOL", "ADA"]
 )
 
-# 예시용 데이터 (실제 봇 연동 시 각 타임프레임별 데이터프레임으로 교체 가능)
-chart_data = pd.DataFrame(
-    {f"{timeframe} 가격 흐름": [112000, 113500, 114200, 113800, 115370]}
-)
+
+# Plotly 차트 생성 함수 (Y축을 데이터 범위에 딱 맞춰 변동성이 잘 보이게 함)
+def draw_chart(prices, coin_name):
+  df = pd.DataFrame({"가격": prices})
+  fig = px.line(
+      df,
+      y="가격",
+      markers=True,
+      title=f"{coin_name} 최근 {timeframe} 흐름",
+  )
+  fig.update_layout(
+      margin=dict(l=10, r=10, t=30, b=10),
+      height=300,
+      xaxis_title="",
+      yaxis_title="",
+  )
+  st.plotly_chart(fig, use_container_width=True)
+
 
 with tab_btc:
-  st.markdown(f"**BTC 최근 {timeframe} 흐름**")
-  st.line_chart(chart_data)
+  draw_chart(
+      [112000000, 113500000, 114200000, 113800000, 115370000], "BTC"
+  )
 
 with tab_eth:
-  st.markdown(f"**ETH 최근 {timeframe} 흐름**")
-  st.line_chart(
-      pd.DataFrame({f"{timeframe} 가격 흐름": [3600, 3650, 3620, 3680, 3686]})
-  )
+  draw_chart([3600000, 3650000, 3620000, 3680000, 3686000], "ETH")
 
 with tab_xrp:
-  st.markdown(f"**XRP 최근 {timeframe} 흐름**")
-  st.line_chart(
-      pd.DataFrame({f"{timeframe} 가격 흐름": [2000, 2030, 2010, 2050, 2071]})
-  )
+  draw_chart([2000, 2030, 2010, 2050, 2071], "XRP")
 
 with tab_sol:
-  st.markdown(f"**SOL 최근 {timeframe} 흐름**")
-  st.line_chart(
-      pd.DataFrame({f"{timeframe} 가격 흐름": [15000, 15300, 15200, 15600, 15800]})
-  )
+  draw_chart([150000, 153000, 152000, 156000, 158000], "SOL")
 
 with tab_ada:
-  st.markdown(f"**ADA 최근 {timeframe} 흐름**")
-  st.line_chart(
-      pd.DataFrame({f"{timeframe} 가격 흐름": [320, 325, 323, 330, 331]})
-  )
+  draw_chart([320, 325, 323, 330, 331], "ADA")
 
 st.markdown("---")
 
-# --- [6. 날짜별 매도 완료 성과 & 실시간 코인 상태 판] ---
+# --- [6. 매도 성과 및 실시간 상태 판] ---
 st.subheader("📅 날짜별 매도 완료 성과 & 복리 자산 캘린더")
 history_df = pd.DataFrame({
     "매도 완료 날짜": ["2026-09-24"],
