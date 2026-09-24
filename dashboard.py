@@ -78,54 +78,51 @@ st.progress(progress_ratio)
 
 st.markdown("---")
 
-# --- [5. 코인별 1시간봉 차트 및 진입 타점 영역 (모바일에서도 표시)] ---
-st.subheader("📊 5개 코인별 1시간봉 차트 & 봇 진입 타점 시각화")
+# --- [5. 코인별 & 타임프레임별 차트 시각화] ---
+st.subheader("📊 코인별 캔들 차트 & 봇 진입 타점 시각화")
 
-# 탭을 이용해 모바일에서도 깔끔하게 코인별 차트를 넘겨볼 수 있게 구성
+# 상단에 타임프레임 선택 셀렉트박스 추가 (5분, 15분, 30분, 1시간, 1일)
+timeframe = st.selectbox(
+    "⏳ 차트 타임프레임 선택", ["5분봉", "15분봉", "30분봉", "1시간봉", "1일봉"]
+)
+
+# 코인 탭 선택
 tab_btc, tab_eth, tab_xrp, tab_sol, tab_ada = st.tabs(
     ["BTC", "ETH", "XRP", "SOL", "ADA"]
 )
 
-# 예시용 더미 차트 데이터 (실제 봇 데이터프레임으로 연동 가능)
+# 예시용 데이터 (실제 봇 연동 시 각 타임프레임별 데이터프레임으로 교체 가능)
 chart_data = pd.DataFrame(
-    {
-        "가격": [
-            112000000,
-            113500000,
-            114200000,
-            113800000,
-            115370000,
-            114900000,
-            115370000,
-        ]
-    }
+    {f"{timeframe} 가격 흐름": [112000, 113500, 114200, 113800, 115370]}
 )
 
 with tab_btc:
-  st.markdown("**BTC 최근 1시간봉 흐름**")
+  st.markdown(f"**BTC 최근 {timeframe} 흐름**")
   st.line_chart(chart_data)
 
 with tab_eth:
-  st.markdown("**ETH 최근 1시간봉 흐름**")
-  eth_data = pd.DataFrame({"가격": [3600000, 3650000, 3620000, 3680000, 3686000]})
-  st.line_chart(eth_data)
+  st.markdown(f"**ETH 최근 {timeframe} 흐름**")
+  st.line_chart(
+      pd.DataFrame({f"{timeframe} 가격 흐름": [3600, 3650, 3620, 3680, 3686]})
+  )
 
 with tab_xrp:
-  st.markdown("**XRP 최근 1시간봉 흐름**")
-  xrp_data = pd.DataFrame({"가격": [2000, 2030, 2010, 2050, 2071]})
-  st.line_chart(xrp_data)
+  st.markdown(f"**XRP 최근 {timeframe} 흐름**")
+  st.line_chart(
+      pd.DataFrame({f"{timeframe} 가격 흐름": [2000, 2030, 2010, 2050, 2071]})
+  )
 
 with tab_sol:
-  st.markdown("**SOL 최근 1시간봉 흐름**")
-  sol_data = pd.DataFrame(
-      {"가격": [150000, 153000, 152000, 156000, 158000]}
+  st.markdown(f"**SOL 최근 {timeframe} 흐름**")
+  st.line_chart(
+      pd.DataFrame({f"{timeframe} 가격 흐름": [15000, 15300, 15200, 15600, 15800]})
   )
-  st.line_chart(sol_data)
 
 with tab_ada:
-  st.markdown("**ADA 최근 1시간봉 흐름**")
-  ada_data = pd.DataFrame({"가격": [320, 325, 323, 330, 331]})
-  st.line_chart(ada_data)
+  st.markdown(f"**ADA 최근 {timeframe} 흐름**")
+  st.line_chart(
+      pd.DataFrame({f"{timeframe} 가격 흐름": [320, 325, 323, 330, 331]})
+  )
 
 st.markdown("---")
 
