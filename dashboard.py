@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import random
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -21,7 +22,7 @@ monthly_target_balance = st.sidebar.number_input(
     "한 달 복리 목표 총자산 (원)", value=2000000, step=10000
 )
 
-# --- [2. 매월 1일 자동 복리 갱신 로직] ---
+# --- [2. 매월 1일 자동 복리 갱신 로직 (Session State 활용)] ---
 now = datetime.now()
 current_month = now.month
 
@@ -65,7 +66,7 @@ with col4:
 
 st.markdown("---")
 
-# --- [4. 복리 목표 달성률 게이지] ---
+# --- [4. 복리 목표 달성률 게이지 및 시각화] ---
 st.subheader("📈 일 복리 및 목표 달성 현황")
 progress_ratio = min(
     max(
@@ -80,7 +81,7 @@ st.progress(progress_ratio)
 
 st.markdown("---")
 
-# --- [5. 거래소 스타일 라인 + 거래량 차트 시각화] ---
+# --- [5. 거래소 스타일 라인 + 거래량 차트 (등락 웨이브 반영)] ---
 st.subheader("📊 코인별 시세 및 거래량 모니터링 차트")
 
 timeframe = st.selectbox(
@@ -115,15 +116,21 @@ def draw_exchange_chart(coin_name, base_price):
       (now_time - delta * i).strftime("%m-%d %H:%M") for i in range(n)
   ][::-1]
 
-  # 가격 및 거래량 더미 데이터 생성
-  prices = [base_price * (1 + (i * 0.0008) - 0.004) for i in range(n)]
-  volumes = [1000 + (i * 150) % 800 for i in range(n)]
+  # 실제 코인처럼 오르내리는 지그재그 등락(웨이브) 생성
+  prices = []
+  current_p = base_price * 0.995
+  for _ in range(n):
+    fluctuation = random.uniform(-0.003, 0.003)
+    current_p = current_p * (1 + fluctuation)
+    prices.append(current_p)
+
+  volumes = [random.randint(800, 2500) for _ in range(n)]
 
   df = pd.DataFrame({"Price": prices, "Volume": volumes})
   df["MA5"] = df["Price"].rolling(window=3, min_periods=1).mean()
   df["MA10"] = df["Price"].rolling(window=5, min_periods=1).mean()
 
-  # 상단 가격 차트와 하단 거래량 차트를 위아래로 배치 (Make Subplots)
+  # 상단 가격 차트와 하단 거래량 차트 배치
   fig = make_subplots(
       rows=2,
       cols=1,
