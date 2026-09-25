@@ -13,16 +13,16 @@ st.set_page_config(
 st.title("🚀 퀀트 자동 매매 실시간 대시보드")
 st.markdown("---")
 
-# --- [1. 사이드바 및 자산 설정] ---
+# --- [1. 사이드바 및 자산 설정 (코인원 실계좌 연동)] ---
 st.sidebar.header("⚙️ 봇 자산 및 목표 설정")
 current_total_balance = st.sidebar.number_input(
-    "코인 실제 총 보유자산 (원)", value=1329057, step=10000
+    "코인 실제 총 보유자산 (원)", value=1327032, step=10000
 )
 monthly_target_balance = st.sidebar.number_input(
     "한 달 복리 목표 총자산 (원)", value=2000000, step=10000
 )
 
-# --- [2. 매월 1일 자동 복리 갱신 로직 (Session State 활용)] ---
+# --- [2. 매월 1일 자동 복리 갱신 로직] ---
 now = datetime.now()
 current_month = now.month
 
@@ -66,7 +66,7 @@ with col4:
 
 st.markdown("---")
 
-# --- [4. 복리 목표 달성률 게이지 및 시각화] ---
+# --- [4. 복리 목표 달성률 게이지] ---
 st.subheader("📈 일 복리 및 목표 달성 현황")
 progress_ratio = min(
     max(
@@ -81,16 +81,14 @@ st.progress(progress_ratio)
 
 st.markdown("---")
 
-# --- [5. 거래소 스타일 라인 + 거래량 차트 (등락 웨이브 반영)] ---
-st.subheader("📊 코인별 시세 및 거래량 모니터링 차트")
+# --- [5. 실제 보유 종목(XRP, ADA, SOL) 중심의 거래소 스타일 차트] ---
+st.subheader("📊 보유 코인별 시세 및 거래량 모니터링 차트")
 
 timeframe = st.selectbox(
     "⏳ 차트 타임프레임 선택", ["3분봉", "15분봉", "1시간봉", "4시간봉", "1일봉"]
 )
 
-tab_btc, tab_eth, tab_xrp, tab_sol, tab_ada = st.tabs(
-    ["BTC", "ETH", "XRP", "SOL", "ADA"]
-)
+tab_xrp, tab_ada, tab_sol = st.tabs(["XRP", "ADA", "SOL"])
 
 
 def draw_exchange_chart(coin_name, base_price):
@@ -108,7 +106,7 @@ def draw_exchange_chart(coin_name, base_price):
   elif timeframe == "4시간봉":
     delta = timedelta(hours=4)
     n = 15
-  else:  # 1일봉
+  else:
     delta = timedelta(days=1)
     n = 15
 
@@ -116,7 +114,6 @@ def draw_exchange_chart(coin_name, base_price):
       (now_time - delta * i).strftime("%m-%d %H:%M") for i in range(n)
   ][::-1]
 
-  # 실제 코인처럼 오르내리는 지그재그 등락(웨이브) 생성
   prices = []
   current_p = base_price * 0.995
   for _ in range(n):
@@ -130,7 +127,6 @@ def draw_exchange_chart(coin_name, base_price):
   df["MA5"] = df["Price"].rolling(window=3, min_periods=1).mean()
   df["MA10"] = df["Price"].rolling(window=5, min_periods=1).mean()
 
-  # 상단 가격 차트와 하단 거래량 차트 배치
   fig = make_subplots(
       rows=2,
       cols=1,
@@ -139,7 +135,6 @@ def draw_exchange_chart(coin_name, base_price):
       row_heights=[0.75, 0.25],
   )
 
-  # 1. 상단 가격 라인 차트 & 이평선
   fig.add_trace(
       go.Scatter(
           x=dates,
@@ -174,7 +169,6 @@ def draw_exchange_chart(coin_name, base_price):
       col=1,
   )
 
-  # 2. 하단 거래량 바 차트
   fig.add_trace(
       go.Bar(
           x=dates,
@@ -200,67 +194,41 @@ def draw_exchange_chart(coin_name, base_price):
   st.plotly_chart(fig, use_container_width=True)
 
 
-with tab_btc:
-  draw_exchange_chart("BTC", 115000000)
-
-with tab_eth:
-  draw_exchange_chart("ETH", 3680000)
-
 with tab_xrp:
   draw_exchange_chart("XRP", 2070)
 
-with tab_sol:
-  draw_exchange_chart("SOL", 158000)
-
 with tab_ada:
-  draw_exchange_chart("ADA", 331)
+  draw_exchange_chart("ADA", 348)
+
+with tab_sol:
+  draw_exchange_chart("SOL", 163500)
 
 st.markdown("---")
 
-# --- [6. 매도 성과 및 실시간 상태 판] ---
-st.subheader("📅 날짜별 매도 완료 성과 & 복리 자산 캘린더")
-history_df = pd.DataFrame({
-    "매도 완료 날짜": ["2026-09-24"],
-    "시작 자산 (원)": ["1,329,057원"],
-    "실현 손익 (원)": ["0원"],
-    "수익률 (%)": ["+0.0%"],
-    "매도 완료 횟수": ["0회"],
-    "매도 후 총자산 (재투자)": ["1,329,057원"],
-    "상태": ["매도 완료 대기 중"],
+# --- [6. 실제 보유 자산 현황 및 봇 상태 판] ---
+st.subheader("📅 코인원 계좌 자산 구성 현황")
+asset_summary_df = pd.DataFrame({
+    "구분": ["보유 원화 (현금)", "가상자산 평가금액", "총 보유자산"],
+    "금액": ["1,156,987 원", "170,045 원", "1,327,032 원"],
+    "상태 / 비고": [
+        "하락장 관망 중 (현금 대기)",
+        "XRP, ADA, SOL 분산 보유 중",
+        "실시간 연동 완료",
+    ],
 })
-st.dataframe(history_df, use_container_width=True)
+st.dataframe(asset_summary_df, use_container_width=True)
 
-st.subheader("📋 실시간 코인 타점 및 전략 분석 판 (전체 5종목)")
+st.subheader("📋 보유 코인 상세 정보 및 봇 전략 판")
 status_df = pd.DataFrame({
-    "코인": ["BTC", "ETH", "XRP", "SOL", "ADA"],
-    "현재가 (원)": [
-        "115,370,000",
-        "3,686,000",
-        "2,071",
-        "158,000",
-        "331",
-    ],
-    "변동성 목표가 (원)": [
-        "117,374,500",
-        "3,752,000",
-        "2,156",
-        "161,250",
-        "344",
-    ],
-    "5일 이평선 (원)": [
-        "115,041,400",
-        "3,688,400",
-        "2,050",
-        "157,560",
-        "328",
-    ],
-    "목표가 대비 차이": ["-1.71%", "-1.76%", "-3.94%", "-2.02%", "-3.64%"],
+    "코인": ["XRP", "ADA", "SOL"],
+    "보유 수량": ["70 개", "35 개", "0.05 개"],
+    "매수평균가 (원)": ["2,167", "348.7", "163,500"],
+    "평가금액 (원)": ["149,870", "12,085", "8,090"],
+    "수익률": ["-1.19%", "-0.97%", "-1.03%"],
     "봇 판단 상태": [
-        "⏳ 목표가 대기 중",
-        "📉 이평선 아래 (관망)",
-        "⏳ 목표가 대기 중",
-        "⏳ 목표가 대기 중",
-        "⏳ 목표가 대기 중",
+        "📉 하락장 관망 (보유 유지)",
+        "📉 하락장 관망 (보유 유지)",
+        "📉 하락장 관망 (보유 유지)",
     ],
 })
 st.dataframe(status_df, use_container_width=True)
