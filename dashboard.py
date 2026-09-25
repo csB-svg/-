@@ -81,14 +81,16 @@ st.progress(progress_ratio)
 
 st.markdown("---")
 
-# --- [5. 실제 보유 종목(XRP, ADA, SOL) 중심의 거래소 스타일 차트] ---
-st.subheader("📊 보유 코인별 시세 및 거래량 모니터링 차트")
+# --- [5. 주요 5종목(BTC, ETH, XRP, ADA, SOL) 거래소 스타일 차트] ---
+st.subheader("📊 주요 코인별 시세 및 거래량 모니터링 차트 (5종목)")
 
 timeframe = st.selectbox(
     "⏳ 차트 타임프레임 선택", ["3분봉", "15분봉", "1시간봉", "4시간봉", "1일봉"]
 )
 
-tab_xrp, tab_ada, tab_sol = st.tabs(["XRP", "ADA", "SOL"])
+tab_btc, tab_eth, tab_xrp, tab_ada, tab_sol = st.tabs(
+    ["BTC", "ETH", "XRP", "ADA", "SOL"]
+)
 
 
 def draw_exchange_chart(coin_name, base_price):
@@ -194,6 +196,12 @@ def draw_exchange_chart(coin_name, base_price):
   st.plotly_chart(fig, use_container_width=True)
 
 
+with tab_btc:
+  draw_exchange_chart("BTC", 115000000)
+
+with tab_eth:
+  draw_exchange_chart("ETH", 3680000)
+
 with tab_xrp:
   draw_exchange_chart("XRP", 2070)
 
@@ -205,7 +213,7 @@ with tab_sol:
 
 st.markdown("---")
 
-# --- [6. 실제 보유 자산 현황 및 봇 상태 판] ---
+# --- [6. 계좌 자산 구성 및 5종목 봇 상태 판] ---
 st.subheader("📅 코인원 계좌 자산 구성 현황")
 asset_summary_df = pd.DataFrame({
     "구분": ["보유 원화 (현금)", "가상자산 평가금액", "총 보유자산"],
@@ -218,14 +226,21 @@ asset_summary_df = pd.DataFrame({
 })
 st.dataframe(asset_summary_df, use_container_width=True)
 
-st.subheader("📋 보유 코인 상세 정보 및 봇 전략 판")
+st.subheader("📋 전체 모니터링 5종목 봇 전략 판")
 status_df = pd.DataFrame({
-    "코인": ["XRP", "ADA", "SOL"],
-    "보유 수량": ["70 개", "35 개", "0.05 개"],
-    "매수평균가 (원)": ["2,167", "348.7", "163,500"],
-    "평가금액 (원)": ["149,870", "12,085", "8,090"],
-    "수익률": ["-1.19%", "-0.97%", "-1.03%"],
+    "코인": ["BTC", "ETH", "XRP", "ADA", "SOL"],
+    "구분 / 보유": ["대장주 (관망)", "대장주 (관망)", "보유중 (70개)", "보유중 (35개)", "보유중 (0.05개)"],
+    "현재가 (원)": ["115,370,000", "3,686,000", "2,071", "348", "163,500"],
+    "변동성 목표가 (원)": [
+        "117,374,500",
+        "3,752,000",
+        "2,156",
+        "362",
+        "168,000",
+    ],
     "봇 판단 상태": [
+        "⏳ 목표가 대기 중",
+        "📉 이평선 아래 (관망)",
         "📉 하락장 관망 (보유 유지)",
         "📉 하락장 관망 (보유 유지)",
         "📉 하락장 관망 (보유 유지)",
