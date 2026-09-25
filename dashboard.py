@@ -16,7 +16,7 @@ st.markdown("---")
 # --- [1. 사이드바 및 자산 설정 (코인원 실계좌 연동)] ---
 st.sidebar.header("⚙️ 봇 자산 및 목표 설정")
 current_total_balance = st.sidebar.number_input(
-    "코인 실제 총 보유자산 (원)", value=1327032, step=10000
+    "코인 실제 총 보유자산 (원)", value=1327378, step=10000
 )
 monthly_target_balance = st.sidebar.number_input(
     "한 달 복리 목표 총자산 (원)", value=2000000, step=10000
@@ -31,12 +31,10 @@ if (
     or st.session_state["base_month"] != current_month
 ):
   st.session_state["base_month"] = current_month
-  st.session_state["starting_balance"] = current_total_balance
+  st.session_state["starting_balance"] = 1329057
   st.session_state["start_date"] = now.date()
 
-starting_balance = st.session_state.get(
-    "starting_balance", current_total_balance
-)
+starting_balance = st.session_state.get("starting_balance", 1329057)
 
 # --- [3. 상단 핵심 지표 (Metrics) 표시] ---
 col1, col2, col3, col4 = st.columns(4)
@@ -52,13 +50,12 @@ with col2:
   )
 
 with col3:
-  profit_rate = (
-      (current_total_balance - starting_balance) / starting_balance
-  ) * 100
+  actual_profit_loss = current_total_balance - starting_balance
+  actual_profit_rate = (actual_profit_loss / starting_balance) * 100
   st.metric(
       label="📊 이번 달 수익률",
-      value=f"{profit_rate:+.2f}%",
-      delta=f"{current_total_balance - starting_balance:+,.0f} 원",
+      value=f"{actual_profit_rate:+.2f}%",
+      delta=f"{actual_profit_loss:+,.0f} 원",
   )
 
 with col4:
@@ -213,30 +210,37 @@ with tab_sol:
 
 st.markdown("---")
 
-# --- [6. 계좌 자산 구성 및 5종목 봇 상태 판] ---
+# --- [6. 계좌 자산 구성 및 5종목 상세 손익 판] ---
 st.subheader("📅 코인원 계좌 자산 구성 현황")
 asset_summary_df = pd.DataFrame({
     "구분": ["보유 원화 (현금)", "가상자산 평가금액", "총 보유자산"],
-    "금액": ["1,156,987 원", "170,045 원", "1,327,032 원"],
+    "금액": ["1,156,987 원", "170,391 원", "1,327,378 원"],
     "상태 / 비고": [
         "하락장 관망 중 (현금 대기)",
-        "XRP, ADA, SOL 분산 보유 중",
+        "XRP, ADA, SOL 분산 보유 중 (총 평가손익 -1,678원)",
         "실시간 연동 완료",
     ],
 })
 st.dataframe(asset_summary_df, use_container_width=True)
 
-st.subheader("📋 전체 모니터링 5종목 봇 전략 판")
+st.subheader("📋 전체 모니터링 5종목 상세 손익 및 봇 전략 판")
 status_df = pd.DataFrame({
     "코인": ["BTC", "ETH", "XRP", "ADA", "SOL"],
-    "구분 / 보유": ["대장주 (관망)", "대장주 (관망)", "보유중 (70개)", "보유중 (35개)", "보유중 (0.05개)"],
-    "현재가 (원)": ["115,370,000", "3,686,000", "2,071", "348", "163,500"],
-    "변동성 목표가 (원)": [
-        "117,374,500",
-        "3,752,000",
-        "2,156",
-        "362",
-        "168,000",
+    "보유 상태": ["미보유 (관망)", "미보유 (관망)", "보유중 (70개)", "보유중 (35개)", "보유중 (0.05개)"],
+    "매수평균가 (원)": ["-", "-", "2,167", "348.7", "163,500"],
+    "현재가 / 평가금액": [
+        "115,370,000 원",
+        "3,686,000 원",
+        "2,071 원 (150,150원)",
+        "348 원 (12,106원)",
+        "163,500 원 (8,135원)",
+    ],
+    "개별 수익률 및 손익": [
+        "-",
+        "-",
+        "-1.01% (-1,540 원)",
+        "-0.80% (-98 원)",
+        "-0.48% (-40 원)",
     ],
     "봇 판단 상태": [
         "⏳ 목표가 대기 중",
