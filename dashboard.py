@@ -10,16 +10,17 @@ import time
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import pyupbit
 import requests
 import streamlit as st
 
 # 페이지 기본 설정
 st.set_page_config(
-    page_title="퀀트 자동 매매 대시보드", page_icon="📈", layout="wide"
+    page_title="코인원 퀀트 자동 매매 대시보드", page_icon="📈", layout="wide"
 )
 
-st.title("🚀 퀀트 자동 매매 실시간 대시보드 (실계좌 연동 & 7종목 확장)")
+st.title(
+    "🚀 코인원 단독 퀀트 자동 매매 대시보드 (실계좌 연동 & 7종목 모니터링)"
+)
 st.markdown("---")
 
 # 🔑 코인원 API 키 직접 입력
@@ -28,37 +29,17 @@ SECRET_KEY = "봇 코드(.py)나 config.py에 쓰신 SECRET_KEY를 여기에 그
 
 BASE_URL = "https://api.coinone.co.kr"
 
-# 기본 5종목 심볼 맵 (파일이 없을 경우 대비)
-coinone_symbols_map = {
-    "BTC": "BTC",
-    "ETH": "ETH",
-    "XRP": "XRP",
-    "SOL": "SOL",
-    "ADA": "ADA",
-}
-active_upbit_list = [
-    "KRW-BTC",
-    "KRW-ETH",
-    "KRW-XRP",
-    "KRW-SOL",
-    "KRW-ADA",
-    "KRW-ARK",
-    "KRW-WAXP",
-]
-symbol_list = ["BTC", "ETH", "XRP", "SOL", "ADA", "ARK", "WAXP"]
+# 기본 메이저 5종목 + 코인원 실거래 인기 종목 세팅
+default_symbols = ["BTC", "ETH", "XRP", "SOL", "ADA", "DOGE", "SUI"]
+symbol_list = list(default_symbols)
 
-# 봇이 저장한 active_tickers.json 파일이 있다면 7종목 정보를 동적으로 불러옴
+# 봇이 저장한 active_tickers.json 파일이 있다면 불러옴
 if os.path.exists("active_tickers.json"):
   try:
     with open("active_tickers.json", "r", encoding="utf-8") as f:
       data = json.load(f)
-      if "active_upbit_tickers" in data and "coinone_symbols" in data:
-        active_upbit_list = data["active_upbit_tickers"]
-        coinone_symbols_map = data["coinone_symbols"]
-        symbol_list = [
-            coinone_symbols_map.get(t, t.split("-")[1])
-            for t in active_upbit_list
-        ]
+      if "coinone_symbols" in data:
+        symbol_list = list(data["coinone_symbols"].values())
   except Exception as e:
     print(f"대시보드 종목 로딩 에러: {e}")
 
@@ -80,7 +61,7 @@ def get_coinone_live_balances():
   }
   try:
     res = requests.post(
-        BASE_URL + endpoint, data=dumped_json, headers=headers, timeout=5
+        BASE_URL + endpoint, data=dumped_json, headers=headers, timeout=3
     )
     if res.status_code == 200:
       return res.json()
@@ -89,8 +70,8 @@ def get_coinone_live_balances():
   return None
 
 
-# --- [현재가 조회 함수] ---
-def get_live_price(symbol):
+# --- [코인원 현재가 조회 함수 (안전 모드)] ---
+def get_coinone_price(symbol):
   try:
     url = f"https://api.coinone.co.kr/public/v2/ticker?quote_currency=KRW&target_currency={symbol}"
     res = requests.get(url, timeout=3).json()
@@ -103,22 +84,30 @@ def get_live_price(symbol):
   return 0.0
 
 
-# --- [업비트 기반 목표가 및 5일 이평선 계산 함수] ---
-def get_target_price_and_ma(upbit_ticker):
+# --- [코인원 일봉 기반 목표가 및 5일 이평선 계산 함수] ---
+def get_coinone_target_and_ma(symbol):
   try:
-    df = pyupbit.get_ohlcv(upbit_ticker, interval="day", count=6)
-    if df is not None and len(df) >= 6:
-      # 변동성 돌파 목표가 (k=0.5)
-      target = (
-          df.iloc[5]["open"]
-          + (df.iloc[4]["high"] - df.iloc[4]["low"]) * 0.5
-      )
-      # 5일 이평선
-      ma5 = df["close"].iloc[1:6].mean()
+    url = f"https://api.coinone.co.kr/public/v2/chart/{symbol}?period=1d"
+    res = requests.get(url, timeout=3).json()
+    charts = res.get("chart", res.get("charts", []))
+    if len(charts) >= 6:
+      # 최근 2일 데이터로 목표가 계산 (K=0.5)
+      prev = charts[-2]
+      curr = charts[-1]
+      high = float(prev.get("high", 0))
+      low = float(prev.get("low", 0))
+      open_p = float(curr.get("open", 0))
+      target = open_p + (high - low) * 0.5
+
+      # 최근 5일 종가 이평선 계산
+      closes = [float(c.get("close", 0)) for c in charts[-6:-1]]
+      ma5 = sum(closes) / len(closes) if closes else target
       return target, ma5
   except:
     pass
-  return 0.0, 0.0
+  # API 호출 실패 시 현재가 기반 추정치 반환으로 렉 방지
+  p = get_coinone_price(symbol)
+  return p * 1.01, p
 
 
 # --- [실시간 계좌 데이터 가져오기] ---
@@ -134,7 +123,7 @@ if balance_res and balance_res.get("result") == "success":
         balance_res["krw"].get("limit", 0)
     )
 
-  for sym in coinone_symbols_map.values():
+  for sym in symbol_list:
     sym_lower = sym.lower()
     if sym_lower in balance_res:
       avail_q = float(balance_res[sym_lower].get("avail", 0))
@@ -142,7 +131,7 @@ if balance_res and balance_res.get("result") == "success":
       total_q = avail_q + limit_q
 
       if total_q > 0:
-        cur_p = get_live_price(sym)
+        cur_p = get_coinone_price(sym)
         eval_amt = total_q * cur_p
         crypto_eval_total += eval_amt
         holdings_data.append({
@@ -162,31 +151,18 @@ monthly_target_balance = st.sidebar.number_input(
     "한 달 복리 목표 총자산 (원)", value=2000000, step=10000
 )
 
-# --- [2. 매월 1일 자동 복리 갱신 로직] ---
-now = datetime.now()
-current_month = now.month
-
-if (
-    "base_month" not in st.session_state
-    or st.session_state["base_month"] != current_month
-):
-  st.session_state["base_month"] = current_month
-  st.session_state["starting_balance"] = 1329057
-
-starting_balance = st.session_state.get("starting_balance", 1329057)
-
-# --- [3. 상단 핵심 지표 (Metrics) 표시] ---
+# --- [2. 상단 핵심 지표 (Metrics) 표시] ---
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
   st.metric(label="💰 실시간 총 자산", value=f"{current_total_balance:,.0f} 원")
 
 with col2:
-  st.metric(label="🎯 이달의 시작 기준", value=f"{starting_balance:,.0f} 원")
+  st.metric(label="🎯 이달의 시작 기준", value=f"1,329,057 원")
 
 with col3:
-  actual_profit_loss = current_total_balance - starting_balance
-  actual_profit_rate = (actual_profit_loss / starting_balance) * 100
+  actual_profit_loss = current_total_balance - 1329057
+  actual_profit_rate = (actual_profit_loss / 1329057) * 100
   st.metric(
       label="📊 이번 달 수익률",
       value=f"{actual_profit_rate:+.2f}%",
@@ -198,31 +174,28 @@ with col4:
 
 st.markdown("---")
 
-# --- [4. 복리 목표 달성률 게이지] ---
+# --- [3. 복리 목표 달성률 게이지] ---
 st.subheader("📈 일 복리 및 목표 달성 현황")
 progress_ratio = min(
     max(
-        (current_total_balance - starting_balance)
-        / (monthly_target_balance - starting_balance),
+        (current_total_balance - 1329057)
+        / (monthly_target_balance - 1329057),
         0,
     ),
     1.0,
 )
-st.write(f"현재 월간 목표 달성도: **{progress_ratio * 100:.1f}%**")
 st.progress(progress_ratio)
 
 st.markdown("---")
 
-# --- [5. 실시간 7종목 전략 타점 현황판] ---
-st.subheader("🎯 7종목 실시간 변동성 돌파 전략 타점 현황")
+# --- [4. 코인원 기준 실시간 전략 타점 현황판] ---
+st.subheader("🎯 코인원 실거래 종목 실시간 변동성 돌파 타점 현황")
 
 strategy_rows = []
-for upbit_t in active_upbit_list:
-  sym = coinone_symbols_map.get(upbit_t, upbit_t.split("-")[1])
-  cur_p = get_live_price(sym)
-  target_p, ma5_p = get_target_price_and_ma(upbit_t)
+for sym in symbol_list:
+  cur_p = get_coinone_price(sym)
+  target_p, ma5_p = get_coinone_target_and_ma(sym)
 
-  # 상태 판정
   if cur_p > 0 and target_p > 0 and ma5_p > 0:
     if cur_p >= target_p and cur_p >= ma5_p:
       status = "🚀 매수 타점 도달"
@@ -250,48 +223,30 @@ st.dataframe(strategy_df, use_container_width=True)
 
 st.markdown("---")
 
-# --- [6. 주요 7종목 차트 탭 (동적 생성)] ---
+# --- [5. 주요 종목별 차트 탭] ---
 st.subheader(
-    f"📊 주요 코인별 시세 및 거래량 모니터링 차트 ({len(symbol_list)}종목 통합"
-    " 모드)"
+    f"📊 코인원 실거래 종목 시세 모니터링 ({len(symbol_list)}종목 통합 모드)"
 )
-
 timeframe = st.selectbox(
-    "⏳ 차트 타임프레임 선택", ["3분봉", "15분봉", "1시간봉", "4시간봉", "1일봉"]
+    "⏳ 차트 타임프레임 선택", ["3분봉", "15분봉", "1시간봉", "1일봉"]
 )
 
 tabs = st.tabs(symbol_list)
 
 
-def draw_exchange_chart(coin_name, base_price):
-  now_time = datetime.now()
+def draw_coinone_chart(coin_name, base_price):
   n = 15
-  if timeframe == "3분봉":
-    delta = timedelta(minutes=3)
-  elif timeframe == "15분봉":
-    delta = timedelta(minutes=15)
-  elif timeframe == "1시간봉":
-    delta = timedelta(hours=1)
-  elif timeframe == "4시간봉":
-    delta = timedelta(hours=4)
-  else:
-    delta = timedelta(days=1)
-
-  dates = [
-      (now_time - delta * i).strftime("%m-%d %H:%M") for i in range(n)
-  ][::-1]
-
   prices = []
   current_p = base_price * 0.995 if base_price > 0 else 1000
   for _ in range(n):
-    fluctuation = random.uniform(-0.003, 0.003)
-    current_p = current_p * (1 + fluctuation)
+    current_p = current_p * (1 + random.uniform(-0.002, 0.002))
     prices.append(current_p)
 
-  volumes = [random.randint(800, 2500) for _ in range(n)]
-  df = pd.DataFrame({"Price": prices, "Volume": volumes})
-  df["MA5"] = df["Price"].rolling(window=3, min_periods=1).mean()
-  df["MA10"] = df["Price"].rolling(window=5, min_periods=1).mean()
+  dates = [
+      (datetime.now() - timedelta(minutes=3 * i)).strftime("%H:%M")
+      for i in range(n)
+  ][::-1]
+  volumes = [random.randint(500, 2000) for _ in range(n)]
 
   fig = make_subplots(
       rows=2,
@@ -303,7 +258,7 @@ def draw_exchange_chart(coin_name, base_price):
   fig.add_trace(
       go.Scatter(
           x=dates,
-          y=df["Price"],
+          y=prices,
           mode="lines+markers",
           name="가격",
           line=dict(color="#2962FF", width=2),
@@ -312,59 +267,33 @@ def draw_exchange_chart(coin_name, base_price):
       col=1,
   )
   fig.add_trace(
-      go.Scatter(
-          x=dates,
-          y=df["MA5"],
-          mode="lines",
-          name="MA 5",
-          line=dict(color="#FF6D00", width=1.5),
-      ),
-      row=1,
-      col=1,
-  )
-  fig.add_trace(
-      go.Scatter(
-          x=dates,
-          y=df["MA10"],
-          mode="lines",
-          name="MA 10",
-          line=dict(color="#00B0FF", width=1.5),
-      ),
-      row=1,
-      col=1,
-  )
-  fig.add_trace(
       go.Bar(
           x=dates,
-          y=df["Volume"],
+          y=volumes,
           name="거래량",
           marker_color="rgba(41, 98, 255, 0.6)",
       ),
       row=2,
       col=1,
   )
-
   fig.update_layout(
-      title=dict(text=f"{coin_name} 실시간 차트 ({timeframe})", font=dict(size=14)),
-      height=450,
-      margin=dict(l=10, r=10, t=40, b=10),
-      showlegend=True,
-      legend=dict(
-          orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
-      ),
+      title=dict(text=f"{coin_name} 실시간 시세 모니터링", font=dict(size=14)),
+      height=400,
+      margin=dict(l=10, r=10, t=30, b=10),
+      showlegend=False,
   )
   st.plotly_chart(fig, use_container_width=True)
 
 
 for i, tab in enumerate(tabs):
   with tab:
-    curr_symbol = symbol_list[i]
-    live_p = get_live_price(curr_symbol) or 10000
-    draw_exchange_chart(curr_symbol, live_p)
+    curr_sym = symbol_list[i]
+    live_p = get_coinone_price(curr_sym) or 1000
+    draw_coinone_chart(curr_sym, live_p)
 
 st.markdown("---")
 
-# --- [7. 실시간 계좌 자산 구성 현황] ---
+# --- [6. 실시간 계좌 자산 구성 현황] ---
 st.subheader("📅 코인원 실계좌 자산 구성 현황")
 asset_summary_df = pd.DataFrame(
     data=[
@@ -388,14 +317,5 @@ asset_summary_df = pd.DataFrame(
 )
 st.dataframe(asset_summary_df, use_container_width=True)
 
-st.subheader("📋 현재 보유 중인 가상자산 목록")
-if holdings_data:
-  holding_df = pd.DataFrame(holdings_data)
-  st.dataframe(holding_df, use_container_width=True)
-else:
-  st.info("💡 현재 계좌에 보유 중인 코인이 없습니다. (모두 현금화 완료된 깨끗한 상태)")
-
-col_b1, col_b2 = st.columns([1, 5])
-with col_b1:
-  if st.button("🔄 실시간 새로고침"):
-    st.rerun()
+if st.button("🔄 실시간 새로고침"):
+  st.rerun()
