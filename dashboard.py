@@ -103,6 +103,24 @@ def get_live_price(symbol):
   return 0.0
 
 
+# --- [업비트 기반 목표가 및 5일 이평선 계산 함수] ---
+def get_target_price_and_ma(upbit_ticker):
+  try:
+    df = pyupbit.get_ohlcv(upbit_ticker, interval="day", count=6)
+    if df is not None and len(df) >= 6:
+      # 변동성 돌파 목표가 (k=0.5)
+      target = (
+          df.iloc[5]["open"]
+          + (df.iloc[4]["high"] - df.iloc[4]["low"]) * 0.5
+      )
+      # 5일 이평선
+      ma5 = df["close"].iloc[1:6].mean()
+      return target, ma5
+  except:
+    pass
+  return 0.0, 0.0
+
+
 # --- [실시간 계좌 데이터 가져오기] ---
 balance_res = get_coinone_live_balances()
 
@@ -195,7 +213,44 @@ st.progress(progress_ratio)
 
 st.markdown("---")
 
-# --- [5. 주요 7종목 차트 탭 (동적 생성)] ---
+# --- [5. 실시간 7종목 전략 타점 현황판] ---
+st.subheader("🎯 7종목 실시간 변동성 돌파 전략 타점 현황")
+
+strategy_rows = []
+for upbit_t in active_upbit_list:
+  sym = coinone_symbols_map.get(upbit_t, upbit_t.split("-")[1])
+  cur_p = get_live_price(sym)
+  target_p, ma5_p = get_target_price_and_ma(upbit_t)
+
+  # 상태 판정
+  if cur_p > 0 and target_p > 0 and ma5_p > 0:
+    if cur_p >= target_p and cur_p >= ma5_p:
+      status = "🚀 매수 타점 도달"
+    elif cur_p >= ma5_p:
+      status = "⏳ 목표가 대기 중"
+    else:
+      status = "💤 관망 중 (이평선 아래)"
+  else:
+    status = "데이터 조회 중"
+
+  cur_str = f"{cur_p:,.4f}원" if cur_p < 1.0 else f"{cur_p:,.0f}원"
+  target_str = f"{target_p:,.4f}원" if target_p < 1.0 else f"{target_p:,.0f}원"
+  ma5_str = f"{ma5_p:,.4f}원" if ma5_p < 1.0 else f"{ma5_p:,.0f}원"
+
+  strategy_rows.append({
+      "코인": sym,
+      "현재가": cur_str,
+      "매수 목표가": target_str,
+      "5일 이평선(MA5)": ma5_str,
+      "봇 전략 상태": status,
+  })
+
+strategy_df = pd.DataFrame(strategy_rows)
+st.dataframe(strategy_df, use_container_width=True)
+
+st.markdown("---")
+
+# --- [6. 주요 7종목 차트 탭 (동적 생성)] ---
 st.subheader(
     f"📊 주요 코인별 시세 및 거래량 모니터링 차트 ({len(symbol_list)}종목 통합"
     " 모드)"
@@ -309,7 +364,7 @@ for i, tab in enumerate(tabs):
 
 st.markdown("---")
 
-# --- [6. 실시간 계좌 자산 구성 현황] ---
+# --- [7. 실시간 계좌 자산 구성 현황] ---
 st.subheader("📅 코인원 실계좌 자산 구성 현황")
 asset_summary_df = pd.DataFrame(
     data=[
