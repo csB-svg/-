@@ -1,13 +1,15 @@
 import base64
 import datetime as dt
+from datetime import datetime, timedelta
 import hashlib
 import hmac
-import time
-from datetime import datetime, timedelta
+import json
+import os
 import random
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import pyupbit
 import requests
 import streamlit as st
 
@@ -16,15 +18,48 @@ st.set_page_config(
     page_title="퀀트 자동 매매 대시보드", page_icon="📈", layout="wide"
 )
 
-st.title("🚀 퀀트 자동 매매 실시간 대시보드 (실계좌 연동)")
+st.title("🚀 퀀트 자동 매매 실시간 대시보드 (실계좌 연동 & 7종목 확장)")
 st.markdown("---")
 
-# 🔑 코인원 API 키 직접 입력 (모듈 에러 원천 차단)
+# 🔑 코인원 API 키 직접 입력
 ACCESS_KEY = "봇 코드(.py)나 config.py에 쓰신 ACCESS_KEY를 여기에 그대로 복사해 넣으세요"
 SECRET_KEY = "봇 코드(.py)나 config.py에 쓰신 SECRET_KEY를 여기에 그대로 복사해 넣으세요"
 
 BASE_URL = "https://api.coinone.co.kr"
-coinone_symbols = {"BTC": "BTC", "ETH": "ETH", "XRP": "XRP", "SOL": "SOL", "ADA": "ADA"}
+
+# 기본 5종목 심볼 맵 (파일이 없을 경우 대비)
+coinone_symbols_map = {
+    "BTC": "BTC",
+    "ETH": "ETH",
+    "XRP": "XRP",
+    "SOL": "SOL",
+    "ADA": "ADA",
+}
+active_upbit_list = [
+    "KRW-BTC",
+    "KRW-ETH",
+    "KRW-XRP",
+    "KRW-SOL",
+    "KRW-ADA",
+    "KRW-ARK",
+    "KRW-WAXP",
+]
+symbol_list = ["BTC", "ETH", "XRP", "SOL", "ADA", "ARK", "WAXP"]
+
+# 봇이 저장한 active_tickers.json 파일이 있다면 7종목 정보를 동적으로 불러옴
+if os.path.exists("active_tickers.json"):
+  try:
+    with open("active_tickers.json", "r", encoding="utf-8") as f:
+      data = json.load(f)
+      if "active_upbit_tickers" in data and "coinone_symbols" in data:
+        active_upbit_list = data["active_upbit_tickers"]
+        coinone_symbols_map = data["coinone_symbols"]
+        symbol_list = [
+            coinone_symbols_map.get(t, t.split("-")[1])
+            for t in active_upbit_list
+        ]
+  except Exception as e:
+    print(f"대시보드 종목 로딩 에러: {e}")
 
 
 # --- [코인원 실계좌 잔고 조회 함수] ---
@@ -80,7 +115,7 @@ if balance_res and balance_res.get("result") == "success":
         balance_res["krw"].get("limit", 0)
     )
 
-  for sym in coinone_symbols.values():
+  for sym in coinone_symbols_map.values():
     sym_lower = sym.lower()
     if sym_lower in balance_res:
       avail_q = float(balance_res[sym_lower].get("avail", 0))
@@ -125,14 +160,10 @@ starting_balance = st.session_state.get("starting_balance", 1329057)
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-  st.metric(
-      label="💰 실시간 총 자산", value=f"{current_total_balance:,.0f} 원"
-  )
+  st.metric(label="💰 실시간 총 자산", value=f"{current_total_balance:,.0f} 원")
 
 with col2:
-  st.metric(
-      label="🎯 이달의 시작 기준", value=f"{starting_balance:,.0f} 원"
-  )
+  st.metric(label="🎯 이달의 시작 기준", value=f"{starting_balance:,.0f} 원")
 
 with col3:
   actual_profit_loss = current_total_balance - starting_balance
@@ -163,16 +194,18 @@ st.progress(progress_ratio)
 
 st.markdown("---")
 
-# --- [5. 주요 5종목 차트 탭] ---
-st.subheader("📊 주요 코인별 시세 및 거래량 모니터링 차트 (5종목)")
+# --- [5. 주요 7종목 차트 탭 (동적 생성)] ---
+st.subheader(
+    f"📊 주요 코인별 시세 및 거래량 모니터링 차트 ({len(symbol_list)}종목 통합"
+    " 모드)"
+)
 
 timeframe = st.selectbox(
     "⏳ 차트 타임프레임 선택", ["3분봉", "15분봉", "1시간봉", "4시간봉", "1일봉"]
 )
 
-tab_btc, tab_eth, tab_xrp, tab_ada, tab_sol = st.tabs(
-    ["BTC", "ETH", "XRP", "ADA", "SOL"]
-)
+# 동적으로 읽어온 종목 리스트만큼 탭 생성
+tabs = st.tabs(symbol_list)
 
 
 def draw_exchange_chart(coin_name, base_price):
@@ -194,7 +227,7 @@ def draw_exchange_chart(coin_name, base_price):
   ][::-1]
 
   prices = []
-  current_p = base_price * 0.995
+  current_p = base_price * 0.995 if base_price > 0 else 1000
   for _ in range(n):
     fluctuation = random.uniform(-0.003, 0.003)
     current_p = current_p * (1 + fluctuation)
@@ -268,16 +301,12 @@ def draw_exchange_chart(coin_name, base_price):
   st.plotly_chart(fig, use_container_width=True)
 
 
-with tab_btc:
-  draw_exchange_chart("BTC", get_live_price("BTC") or 115000000)
-with tab_eth:
-  draw_exchange_chart("ETH", get_live_price("ETH") or 3680000)
-with tab_xrp:
-  draw_exchange_chart("XRP", get_live_price("XRP") or 2070)
-with tab_ada:
-  draw_exchange_chart("ADA", get_live_price("ADA") or 348)
-with tab_sol:
-  draw_exchange_chart("SOL", get_live_price("SOL") or 163500)
+# 각 탭별로 동적 차트 매핑
+for i, tab in enumerate(tabs):
+  with tab:
+    curr_symbol = symbol_list[i]
+    live_p = get_live_price(curr_symbol) or 10000
+    draw_exchange_chart(curr_symbol, live_p)
 
 st.markdown("---")
 
@@ -303,10 +332,7 @@ if holdings_data:
   holding_df = pd.DataFrame(holdings_data)
   st.dataframe(holding_df, use_container_width=True)
 else:
-  st.info(
-      "💡 현재 계좌에 보유 중인 코인이 없습니다. (모두 현금화 완료된 깨끗한"
-      " 상태)"
-  )
+  st.info("💡 현재 계좌에 보유 중인 코인이 없습니다. (모두 현금화 완료된 깨끗한 상태)")
 
 col_b1, col_b2 = st.columns([1, 5])
 with col_b1:
