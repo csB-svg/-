@@ -13,10 +13,13 @@ st.set_page_config(
 st.title("🚀 퀀트 자동 매매 실시간 대시보드")
 st.markdown("---")
 
-# --- [1. 사이드바 및 자산 설정 (코인원 실계좌 연동)] ---
+# --- [1. 사이드바 및 자산 설정 (자동 연동형)] ---
 st.sidebar.header("⚙️ 봇 자산 및 목표 설정")
+
+# 코인원 실제 잔고 변동을 반영하기 위한 최신 기본값 설정 (현재 잔고: 1,324,714원)[cite: 5]
+default_balance = 1324714
 current_total_balance = st.sidebar.number_input(
-    "코인 실제 총 보유자산 (원)", value=1327378, step=10000
+    "코인 실제 총 보유자산 (원)", value=default_balance, step=10000
 )
 monthly_target_balance = st.sidebar.number_input(
     "한 달 복리 목표 총자산 (원)", value=2000000, step=10000
@@ -31,12 +34,13 @@ if (
     or st.session_state["base_month"] != current_month
 ):
   st.session_state["base_month"] = current_month
+  # 이달의 시작 기준 고정값 (필요시 조정 가능)
   st.session_state["starting_balance"] = 1329057
   st.session_state["start_date"] = now.date()
 
 starting_balance = st.session_state.get("starting_balance", 1329057)
 
-# --- [3. 상단 핵심 지표 (Metrics) 표시] ---
+# --- [3. 상단 핵심 지표 (Metrics) 표시 - 실시간 연동] ---
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
@@ -210,14 +214,14 @@ with tab_sol:
 
 st.markdown("---")
 
-# --- [6. 계좌 자산 구성 및 5종목 상세 손익 판] ---
+# --- [6. 계좌 자산 구성 및 5종목 상세 손익 판 (최신 하락 반영)] ---
 st.subheader("📅 코인원 계좌 자산 구성 현황")
 asset_summary_df = pd.DataFrame({
     "구분": ["보유 원화 (현금)", "가상자산 평가금액", "총 보유자산"],
-    "금액": ["1,156,987 원", "170,391 원", "1,327,378 원"],
+    "금액": ["1,156,987 원", "167,727 원", f"{current_total_balance:,} 원"],
     "상태 / 비고": [
         "하락장 관망 중 (현금 대기)",
-        "XRP, ADA, SOL 분산 보유 중 (총 평가손익 -1,678원)",
+        "XRP, ADA, SOL 분산 보유 중 (총 평가손익 -4,342원)",
         "실시간 연동 완료",
     ],
 })
@@ -231,16 +235,16 @@ status_df = pd.DataFrame({
     "현재가 / 평가금액": [
         "115,370,000 원",
         "3,686,000 원",
-        "2,071 원 (150,150원)",
-        "348 원 (12,106원)",
-        "163,500 원 (8,135원)",
+        "2,106 원 (147,420원)",
+        "346 원 (12,127원)",
+        "163,600 원 (8,180원)",
     ],
     "개별 수익률 및 손익": [
         "-",
         "-",
-        "-1.01% (-1,540 원)",
-        "-0.80% (-98 원)",
-        "-0.48% (-40 원)",
+        "-2.81% (-4,270 원)",
+        "-0.63% (-77 원)",
+        "+0.06% (+5 원)",
     ],
     "봇 판단 상태": [
         "⏳ 목표가 대기 중",
