@@ -138,7 +138,7 @@ current_total_balance = krw_avail + crypto_eval_total
 if current_total_balance == 0:
   current_total_balance = 1315877
 
-# --- [1. 사이드바 설정] ---
+# --- [1. 사이드바 설정 (목표 자산 입력)] ---
 st.sidebar.header("⚙️ 봇 자산 및 목표 설정")
 monthly_target_balance = st.sidebar.number_input(
     "한 달 복리 목표 총자산 (원)", value=2000000, step=10000
@@ -205,7 +205,6 @@ timeframe = st.selectbox(
     "⏳ 차트 타임프레임 선택", ["3분봉", "15분봉", "1시간봉", "4시간봉", "1일봉"]
 )
 
-# 동적으로 읽어온 종목 리스트만큼 탭 생성
 tabs = st.tabs(symbol_list)
 
 
@@ -302,7 +301,6 @@ def draw_exchange_chart(coin_name, base_price):
   st.plotly_chart(fig, use_container_width=True)
 
 
-# 각 탭별로 동적 차트 매핑
 for i, tab in enumerate(tabs):
   with tab:
     curr_symbol = symbol_list[i]
@@ -313,19 +311,26 @@ st.markdown("---")
 
 # --- [6. 실시간 계좌 자산 구성 현황] ---
 st.subheader("📅 코인원 실계좌 자산 구성 현황")
-asset_summary_df = pd.DataFrame({
-    "구분": ["보유 원화 (현금)", "가상자산 평가금액", "총 보유자산"],
-    "금액": [
-        f"{krw_avail:,.0f} 원",
-        f"{crypto_eval_total:,.0f} 원",
-        f"{current_total_balance:,.0f} 원",
+asset_summary_df = pd.DataFrame(
+    data=[
+        ["보유 원화 (현금)", f"{krw_avail:,.0f} 원", "100% 현금 대기 중 (안전 모드)"],
+        [
+            "가상자산 평가금액",
+            f"{crypto_eval_total:,.0f} 원",
+            (
+                "보유 코인 있음"
+                if crypto_eval_total > 0
+                else "보유 코인 없음 (깔끔하게 비워짐)"
+            ),
+        ],
+        [
+            "총 보유자산",
+            f"{current_total_balance:,.0f} 원",
+            "코인원 실시간 API 연동 완료",
+        ],
     ],
-    "상태 / 비고": [
-        "100% 현금 대기 중 (안전 모드)",
-        "보유 코인 없음 (깔끔하게 비워짐)",
-        "코인원 실시간 API 연동 완료",
-    ],
-})
+    columns=["구분", "금액", "상태 / 비고"],
+)
 st.dataframe(asset_summary_df, use_container_width=True)
 
 st.subheader("📋 현재 보유 중인 가상자산 목록")
