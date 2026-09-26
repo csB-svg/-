@@ -6,6 +6,7 @@ import hmac
 import json
 import os
 import random
+import time
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
