@@ -19,8 +19,9 @@ st.set_page_config(
 st.title("🚀 퀀트 자동 매매 실시간 대시보드 (실계좌 연동)")
 st.markdown("---")
 
-# 🔑 코인원 API 키 직접 설정 (에러 방지용)
-from config import ACCESS_KEY, SECRET_KEY
+# 🔑 코인원 API 키 직접 입력 (모듈 에러 원천 차단)
+ACCESS_KEY = "봇 코드(.py)나 config.py에 쓰신 ACCESS_KEY를 여기에 그대로 복사해 넣으세요"
+SECRET_KEY = "봇 코드(.py)나 config.py에 쓰신 SECRET_KEY를 여기에 그대로 복사해 넣으세요"
 
 BASE_URL = "https://api.coinone.co.kr"
 coinone_symbols = {"BTC": "BTC", "ETH": "ETH", "XRP": "XRP", "SOL": "SOL", "ADA": "ADA"}
