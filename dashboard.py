@@ -10,7 +10,6 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import requests
 import streamlit as st
-from config import ACCESS_KEY, SECRET_KEY
 
 # 페이지 기본 설정
 st.set_page_config(
@@ -19,6 +18,9 @@ st.set_page_config(
 
 st.title("🚀 퀀트 자동 매매 실시간 대시보드 (실계좌 연동)")
 st.markdown("---")
+
+# 🔑 코인원 API 키 직접 설정 (에러 방지용)
+from config import ACCESS_KEY, SECRET_KEY
 
 BASE_URL = "https://api.coinone.co.kr"
 coinone_symbols = {"BTC": "BTC", "ETH": "ETH", "XRP": "XRP", "SOL": "SOL", "ADA": "ADA"}
@@ -97,7 +99,7 @@ if balance_res and balance_res.get("result") == "success":
 
 current_total_balance = krw_avail + crypto_eval_total
 if current_total_balance == 0:
-  current_total_balance = 1315877  # API 지연 방지용 기본 안전값
+  current_total_balance = 1315877
 
 # --- [1. 사이드바 설정] ---
 st.sidebar.header("⚙️ 봇 자산 및 목표 설정")
@@ -295,7 +297,6 @@ asset_summary_df = pd.DataFrame({
 })
 st.dataframe(asset_summary_df, use_container_width=True)
 
-# 보유 가상자산 상세 표
 st.subheader("📋 현재 보유 중인 가상자산 목록")
 if holdings_data:
   holding_df = pd.DataFrame(holdings_data)
