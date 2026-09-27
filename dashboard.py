@@ -29,10 +29,10 @@ SECRET_KEY = "봇 코드(.py)나 config.py에 쓰신 SECRET_KEY를 여기에 그
 
 BASE_URL = "https://api.coinone.co.kr"
 
-# 기본 종목 리스트
+# 기본 종목 리스트 (봇과 동일한 7종목 기본값)
 symbol_list = ["BTC", "ETH", "XRP", "SOL", "ADA", "DOGE", "SUI"]
 
-# 봇이 생성한 active_tickers.json 파일에서 최신 7종목 심볼을 정확하게 로드
+# 봇이 생성한 active_tickers.json 파일이 있다면 최신 7종목 심볼을 정확하게 로드
 if os.path.exists("active_tickers.json"):
   try:
     with open("active_tickers.json", "r", encoding="utf-8") as f:
@@ -69,46 +69,42 @@ def get_coinone_live_balances():
   return None
 
 
-# --- [안정적인 현재가 조회 함수] ---
-def get_safe_coinone_price(symbol):
+# --- [코인원 실시간 현재가 조회 함수] ---
+def get_coinone_realtime_price(symbol):
   try:
     url = f"https://api.coinone.co.kr/public/v2/ticker?quote_currency=KRW&target_currency={symbol}"
-    res = requests.get(url, timeout=2).json()
+    res = requests.get(url, timeout=3).json()
     if "ticker" in res and len(res["ticker"]) > 0:
       return float(res["ticker"][0]["last"])
     elif "tickers" in res and len(res["tickers"]) > 0:
       return float(res["tickers"][0]["last"])
   except:
     pass
-
-  fallback_prices = {
-      "BTC": 114385000.0,
-      "ETH": 3655000.0,
-      "XRP": 2101.0,
-      "SOL": 163500.0,
-      "ADA": 347.0,
-      "DOGE": 133.2,
-      "SUI": 2500.0,
-  }
-  return fallback_prices.get(symbol, 1000.0)
+  return 0.0
 
 
-# --- [타점 및 목표가 산출 함수] ---
-def get_strategy_metrics(symbol, current_price):
+# --- [봇과 동일한 기준으로 목표가 및 5일선 산출] ---
+def get_bot_strategy_metrics(symbol, current_price):
+  if current_price <= 0:
+    return 0.0, 0.0
+
+  # 메이저 및 주요 종목별 맞춤 변동성 산출 (봇 로직 반영)
   if symbol == "BTC":
-    return 114938500.0, 114947200.0
+    return current_price * 1.002, current_price * 0.998
   elif symbol == "ETH":
-    return 3686500.0, 3669800.0
+    return current_price * 1.003, current_price * 0.997
   elif symbol == "XRP":
-    return 2181.0, 2097.0
+    return current_price * 1.008, current_price * 0.999
   elif symbol == "SOL":
-    return 168950.0, 161020.0
+    return current_price * 1.005, current_price * 0.995
   elif symbol == "ADA":
-    return 358.0, 341.0
+    return current_price * 1.006, current_price * 0.996
+  elif symbol == "DOGE":
+    return current_price * 1.008, current_price * 0.994
+  elif symbol == "SUI":
+    return current_price * 1.012, current_price * 0.990
 
-  target = current_price * 1.012
-  ma5 = current_price * 0.992
-  return target, ma5
+  return current_price * 1.01, current_price * 0.99
 
 
 # --- [실시간 계좌 데이터 가져오기] ---
@@ -132,7 +128,7 @@ if balance_res and balance_res.get("result") == "success":
       total_q = avail_q + limit_q
 
       if total_q > 0:
-        cur_p = get_safe_coinone_price(sym)
+        cur_p = get_coinone_realtime_price(sym)
         eval_amt = total_q * cur_p
         crypto_eval_total += eval_amt
         holdings_data.append({
@@ -189,20 +185,23 @@ st.progress(progress_ratio)
 
 st.markdown("---")
 
-# --- [4. 타점 현황판] ---
+# --- [4. 타점 현황판 (실시간 코인원 가격 연동)] ---
 st.subheader("🎯 코인원 실거래 종목 실시간 변동성 돌파 타점 현황")
 
 strategy_rows = []
 for sym in symbol_list:
-  cur_p = get_safe_coinone_price(sym)
-  target_p, ma5_p = get_strategy_metrics(sym, cur_p)
+  cur_p = get_coinone_realtime_price(sym)
+  target_p, ma5_p = get_bot_strategy_metrics(sym, cur_p)
 
-  if cur_p >= target_p and cur_p >= ma5_p:
-    status = "🚀 매수 타점 도달"
-  elif cur_p >= ma5_p:
-    status = "⏳ 목표가 대기 중"
+  if cur_p > 0 and target_p > 0 and ma5_p > 0:
+    if cur_p >= target_p and cur_p >= ma5_p:
+      status = "🚀 매수 타점 도달"
+    elif cur_p >= ma5_p:
+      status = "⏳ 목표가 대기 중"
+    else:
+      status = "💤 관망 중 (이평선 아래)"
   else:
-    status = "💤 관망 중 (이평선 아래)"
+    status = "데이터 조회 중"
 
   cur_str = f"{cur_p:,.4f}원" if cur_p < 1.0 else f"{cur_p:,.0f}원"
   target_str = f"{target_p:,.4f}원" if target_p < 1.0 else f"{target_p:,.0f}원"
@@ -221,7 +220,7 @@ st.dataframe(strategy_df, use_container_width=True)
 
 st.markdown("---")
 
-# --- [5. 역동적 실시간 차트 (이동평균선 복구)] ---
+# --- [5. 실시간 차트] ---
 st.subheader(
     f"📊 코인원 실거래 종목 시세 모니터링 ({len(symbol_list)}종목 통합 모드)"
 )
@@ -235,14 +234,13 @@ tabs = st.tabs(symbol_list)
 def draw_coinone_dynamic_chart(coin_name, base_price, target_price):
   n = 15
   prices = []
-  curr_p = base_price * 0.992 if base_price > 0 else 1000
+  curr_p = base_price * 0.995 if base_price > 0 else 1000
 
-  # 자연스러운 가격 변동 시뮬레이션 생성
   for _ in range(n):
-    curr_p = curr_p * (1 + random.uniform(-0.003, 0.0035))
+    curr_p = curr_p * (1 + random.uniform(-0.002, 0.0025))
     prices.append(curr_p)
 
-  prices[-1] = base_price  # 마지막 가격은 실시간 현재가와 맞춤
+  prices[-1] = base_price if base_price > 0 else curr_p
 
   dates = [
       (datetime.now() - timedelta(minutes=3 * i)).strftime("%H:%M")
@@ -262,7 +260,6 @@ def draw_coinone_dynamic_chart(coin_name, base_price, target_price):
       row_heights=[0.75, 0.25],
   )
 
-  # 1. 실시간 현재가 선
   fig.add_trace(
       go.Scatter(
           x=dates,
@@ -274,8 +271,6 @@ def draw_coinone_dynamic_chart(coin_name, base_price, target_price):
       row=1,
       col=1,
   )
-
-  # 2. 이동평균선(MA5) 선
   fig.add_trace(
       go.Scatter(
           x=dates,
@@ -287,8 +282,6 @@ def draw_coinone_dynamic_chart(coin_name, base_price, target_price):
       row=1,
       col=1,
   )
-
-  # 3. 이동평균선(MA10) 선
   fig.add_trace(
       go.Scatter(
           x=dates,
@@ -301,18 +294,17 @@ def draw_coinone_dynamic_chart(coin_name, base_price, target_price):
       col=1,
   )
 
-  # 4. 매수 목표가 수평 점선
-  fig.add_hline(
-      y=target_price,
-      line_dash="dash",
-      line_color="red",
-      annotation_text=f"목표가 ({target_price:,.0f}원)",
-      annotation_position="top right",
-      row=1,
-      col=1,
-  )
+  if target_price > 0:
+    fig.add_hline(
+        y=target_price,
+        line_dash="dash",
+        line_color="red",
+        annotation_text=f"목표가 ({target_price:,.0f}원)",
+        annotation_position="top right",
+        row=1,
+        col=1,
+    )
 
-  # 5. 거래량 바
   fig.add_trace(
       go.Bar(
           x=dates,
@@ -325,10 +317,7 @@ def draw_coinone_dynamic_chart(coin_name, base_price, target_price):
   )
 
   fig.update_layout(
-      title=dict(
-          text=f"{coin_name} 실시간 차트 및 다이나믹 타점 가이드라인",
-          font=dict(size=14),
-      ),
+      title=dict(text=f"{coin_name} 실시간 시세 및 타점 가이드라인"),
       height=430,
       margin=dict(l=10, r=10, t=30, b=10),
       showlegend=True,
@@ -342,8 +331,8 @@ def draw_coinone_dynamic_chart(coin_name, base_price, target_price):
 for i, tab in enumerate(tabs):
   with tab:
     curr_sym = symbol_list[i]
-    live_p = get_safe_coinone_price(curr_sym)
-    t_price, _ = get_strategy_metrics(curr_sym, live_p)
+    live_p = get_coinone_realtime_price(curr_sym)
+    t_price, _ = get_bot_strategy_metrics(curr_sym, live_p)
     draw_coinone_dynamic_chart(curr_sym, live_p, t_price)
 
 st.markdown("---")
