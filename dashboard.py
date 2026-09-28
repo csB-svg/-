@@ -41,7 +41,6 @@ if os.path.exists("active_tickers.json"):
     print(f"대시보드 종목 로딩 에러: {e}")
 
 
-# --- [코인원 실계좌 잔고 조회 함수] ---
 def get_coinone_live_balances():
   endpoint = "/v2/account/balance/"
   payload = {"access_token": ACCESS_KEY, "nonce": int(time.time() * 1000)}
@@ -50,7 +49,6 @@ def get_coinone_live_balances():
   signature = hmac.new(
       SECRET_KEY.upper().encode("utf-8"), encoded_payload, hashlib.sha512
   ).hexdigest()
-
   headers = {
       "Content-Type": "application/json",
       "X-COINONE-PAYLOAD": encoded_payload.decode("utf-8"),
@@ -77,8 +75,7 @@ def get_fast_current_price(symbol):
       "DOGE": 133.0,
       "SUI": 1702.0,
   }
-  base_p = realtime_map.get(symbol, 1000.0)
-  return base_p
+  return realtime_map.get(symbol, 1000.0)
 
 
 def get_bot_strategy_metrics(symbol, current_price):
@@ -99,14 +96,10 @@ def get_bot_strategy_metrics(symbol, current_price):
   return current_price * 1.01, current_price * 0.99
 
 
-# --- [실시간 계좌 데이터 및 보유 코인 정밀 파싱] ---
 balance_res = get_coinone_live_balances()
-
 krw_avail = 0.0
 crypto_eval_total = 0.0
 holdings_data = []
-
-# 앱에 나타난 실제 보유 데이터 강제 반영 및 API 파싱 결합
 manual_holdings = {
     "BTC": {"qty": 0.001, "avg": 115560000.0},
     "SUI": {"qty": 30.0, "avg": 1702.0},
@@ -118,8 +111,6 @@ if balance_res:
     krw_avail = float(balance_res["krw"].get("avail", 0)) + float(
         balance_res["krw"].get("limit", 0)
     )
-
-  # API 응답에서 코인 잔고 탐색
   for k_key, v_val in balance_res.items():
     if k_key in ["result", "errorCode", "krw", "timestamp", "completed_orders"]:
       continue
@@ -130,9 +121,11 @@ if balance_res:
       if total_q > 0:
         sym = k_key.upper()
         if sym not in manual_holdings:
-          manual_holdings[sym] = {"qty": total_q, "avg": get_fast_current_price(sym)}
+          manual_holdings[sym] = {
+              "qty": total_q,
+              "avg": get_fast_current_price(sym),
+          }
 
-# 수동/API 통합 보유 자산 목록 생성
 for sym, info in manual_holdings.items():
   total_q = info["qty"]
   if total_q > 0:
@@ -147,13 +140,13 @@ for sym, info in manual_holdings.items():
     })
 
 if krw_avail == 0:
-  krw_avail = 1140837  # 앱 화면 기준 원화 잔고 반영
+  krw_avail = 1140837
 
 current_total_balance = krw_avail + crypto_eval_total
 if current_total_balance == 0:
   current_total_balance = 1315627
 
-# --- [1. 사이드바 설정] ---
+# --- [1. 사이드바] ---
 st.sidebar.header("⚙️ 봇 자산 및 목표 설정")
 monthly_target_balance = st.sidebar.number_input(
     "한 달 복리 목표 총자산 (원)", value=2000000, step=10000
@@ -161,13 +154,10 @@ monthly_target_balance = st.sidebar.number_input(
 
 # --- [2. 상단 핵심 지표] ---
 col1, col2, col3, col4 = st.columns(4)
-
 with col1:
   st.metric(label="💰 실시간 총 자산", value=f"{current_total_balance:,.0f} 원")
-
 with col2:
-  st.metric(label="🎯 이달의 시작 기준", value=f"1,329,057 원")
-
+  st.metric(label="🎯 이달의 시작 기준", value="1,329,057 원")
 with col3:
   actual_profit_loss = current_total_balance - 1329057
   actual_profit_rate = (actual_profit_loss / 1329057) * 100
@@ -176,13 +166,12 @@ with col3:
       value=f"{actual_profit_rate:+.2f}%",
       delta=f"{actual_profit_loss:+,.0f} 원",
   )
-
 with col4:
   st.metric(label="🏁 한 달 목표 자산", value=f"{monthly_target_balance:,.0f} 원")
 
 st.markdown("---")
 
-# --- [3. 게이지] ---
+# --- [3. 목표 달성률] ---
 st.subheader("📈 일 복리 및 목표 달성 현황")
 progress_ratio = min(
     max(
@@ -198,12 +187,10 @@ st.markdown("---")
 
 # --- [4. 타점 현황판] ---
 st.subheader("🎯 코인원 실거래 종목 실시간 변동성 돌파 타점 현황")
-
 strategy_rows = []
 for sym in symbol_list:
   cur_p = get_fast_current_price(sym)
   target_p, ma5_p = get_bot_strategy_metrics(sym, cur_p)
-
   if cur_p >= target_p and cur_p >= ma5_p:
     status = "🚀 매수 타점 도달"
   elif cur_p >= ma5_p:
@@ -214,7 +201,6 @@ for sym in symbol_list:
   cur_str = f"{cur_p:,.4f}원" if cur_p < 1.0 else f"{cur_p:,.0f}원"
   target_str = f"{target_p:,.4f}원" if target_p < 1.0 else f"{target_p:,.0f}원"
   ma5_str = f"{ma5_p:,.4f}원" if ma5_p < 1.0 else f"{ma5_p:,.0f}원"
-
   strategy_rows.append({
       "코인": sym,
       "현재가": cur_str,
@@ -235,7 +221,6 @@ st.subheader(
 timeframe = st.selectbox(
     "⏳ 차트 타임프레임 선택", ["3분봉", "15분봉", "1시간봉", "1일봉"]
 )
-
 tabs = st.tabs(symbol_list)
 
 
@@ -243,13 +228,10 @@ def draw_coinone_dynamic_chart(coin_name, base_price, target_price):
   n = 15
   prices = []
   curr_p = base_price * 0.995 if base_price > 0 else 1000
-
   for _ in range(n):
     curr_p = curr_p * (1 + random.uniform(-0.002, 0.0025))
     prices.append(curr_p)
-
   prices[-1] = base_price
-
   dates = [
       (datetime.now() - timedelta(minutes=3 * i)).strftime("%H:%M")
       for i in range(n)
@@ -267,7 +249,6 @@ def draw_coinone_dynamic_chart(coin_name, base_price, target_price):
       vertical_spacing=0.03,
       row_heights=[0.75, 0.25],
   )
-
   fig.add_trace(
       go.Scatter(
           x=dates,
@@ -301,7 +282,6 @@ def draw_coinone_dynamic_chart(coin_name, base_price, target_price):
       row=1,
       col=1,
   )
-
   if target_price > 0:
     fig.add_hline(
         y=target_price,
@@ -312,7 +292,6 @@ def draw_coinone_dynamic_chart(coin_name, base_price, target_price):
         row=1,
         col=1,
     )
-
   fig.add_trace(
       go.Bar(
           x=dates,
@@ -323,7 +302,6 @@ def draw_coinone_dynamic_chart(coin_name, base_price, target_price):
       row=2,
       col=1,
   )
-
   fig.update_layout(
       title=dict(text=f"{coin_name} 실시간 시세 및 타점 가이드라인"),
       height=430,
@@ -345,7 +323,7 @@ for i, tab in enumerate(tabs):
 
 st.markdown("---")
 
-# --- [6. 계좌 자산 구성 및 보유 코인 목록] ---
+# --- [6. 자산 구성 및 보유 코인] ---
 st.subheader("📅 코인원 실계좌 자산 구성 현황")
 asset_summary_df = pd.DataFrame(
     data=[
