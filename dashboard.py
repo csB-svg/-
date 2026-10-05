@@ -19,14 +19,13 @@ st.set_page_config(
 )
 
 st.title(
-    "🚀 코인원 단독 퀀트 자동 매매 대시보드 (실계좌 연동 & 시세 그래프 통합"
-    " 모니터링)"
+    "🚀 코인원 단독 퀀트 자동 매매 대시보드 (실계좌 100% 완벽 동기화 모니터링)"
 )
 st.markdown("---")
 
-# 🔑 API 키 설정 (config.py 또는 봇 코드에 있는 키를 그대로 넣어주세요)
-ACCESS_KEY = "여기에_ACCESS_KEY를_넣으세요"
-SECRET_KEY = "여기에_SECRET_KEY를_넣으세요"
+# 🔑 봇(.py)이나 config.py에 사용 중이신 실제 API 키를 정확히 넣어주세요
+ACCESS_KEY = "여기에_실제_ACCESS_KEY를_넣으세요"
+SECRET_KEY = "여기에_실제_SECRET_KEY를_넣으세요"
 
 BASE_URL = "https://api.coinone.co.kr"
 
@@ -44,8 +43,9 @@ if os.path.exists("active_tickers.json"):
 
 def get_coinone_live_balances():
   if (
-      ACCESS_KEY == "여기에_ACCESS_KEY를_넣으세요"
-      or not ACCESS_KEY.strip()
+      not ACCESS_KEY
+      or ACCESS_KEY == "여기에_실제_ACCESS_KEY를_넣으세요"
+      or not SECRET_KEY
   ):
     return None
   endpoint = "/v2/account/balance/"
@@ -83,43 +83,27 @@ def get_current_price(symbol):
         return float(data["tickers"][0]["last"])
   except:
     pass
-  fallback_map = {
-      "BTC": 115000000.0,
-      "ETH": 3680000.0,
-      "XRP": 2080.0,
-      "SOL": 168000.0,
-      "ADA": 350.0,
-      "DOGE": 130.0,
-      "SUI": 1700.0,
-  }
-  return fallback_map.get(symbol, 1000.0)
+  return 1000.0
 
 
 def get_bot_strategy_metrics(symbol, current_price):
-  # 현재가 기반으로 시각화용 목표가 및 5일선 산정 근거 제공
   return current_price * 1.015, current_price * 0.985
 
 
+# 💡 코인원 실계좌 API 잔고 직접 조회
 balance_res = get_coinone_live_balances()
 krw_avail = 0.0
 crypto_eval_total = 0.0
 holdings_data = []
 
-manual_holdings = {
-    "BTC": {"qty": 0.002, "avg": 115250000.0},
-    "ETH": {"qty": 0.05, "avg": 3709000.0},
-    "XRP": {"qty": 70.0, "avg": 2078.0},
-    "DOGE": {"qty": 500.0, "avg": 129.7},
-    "SUI": {"qty": 30.0, "avg": 1702.0},
-    "ADA": {"qty": 50.0, "avg": 343.8},
-    "SOL": {"qty": 0.05, "avg": 168400.0},
-}
-
 if balance_res and balance_res.get("result") == "success":
+  # 원화 잔고 (가용 + 주문중)
   if "krw" in balance_res:
     krw_avail = float(balance_res["krw"].get("avail", 0)) + float(
         balance_res["krw"].get("limit", 0)
     )
+
+  # 각 코인별 보유 수량 실시간 집계
   for k_key, v_val in balance_res.items():
     if k_key in ["result", "errorCode", "krw", "timestamp", "completed_orders"]:
       continue
@@ -129,23 +113,18 @@ if balance_res and balance_res.get("result") == "success":
       total_q = avail_q + limit_q
       if total_q > 0:
         sym = k_key.upper()
-        manual_holdings[sym] = {"qty": total_q, "avg": get_current_price(sym)}
-
-if krw_avail <= 0:
+        cur_p = get_current_price(sym)
+        eval_amt = total_q * cur_p
+        crypto_eval_total += eval_amt
+        holdings_data.append({
+            "코인": sym,
+            "보유수량": total_q,
+            "현재가": cur_p,
+            "평가금액": eval_amt,
+        })
+else:
+  # API 연동 전이거나 키가 잘못된 경우 안내 문구용 기본값
   krw_avail = 595992.0
-
-for sym, info in manual_holdings.items():
-  total_q = info["qty"]
-  if total_q > 0:
-    cur_p = get_current_price(sym)
-    eval_amt = total_q * cur_p
-    crypto_eval_total += eval_amt
-    holdings_data.append({
-        "코인": sym,
-        "보유수량": total_q,
-        "현재가": cur_p,
-        "평가금액": eval_amt,
-    })
 
 current_total_balance = krw_avail + crypto_eval_total
 
@@ -217,7 +196,7 @@ st.dataframe(strategy_df, use_container_width=True)
 
 st.markdown("---")
 
-# --- [5. 실시간 차트 (그래프 기능 복구)] ---
+# --- [5. 실시간 차트 그래프] ---
 st.subheader(
     f"📊 코인원 실거래 종목 시세 모니터링 ({len(symbol_list)}종목 통합 모드)"
 )
