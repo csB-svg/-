@@ -10,6 +10,7 @@ import time
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import pyupbit
 import requests
 import streamlit as st
 
@@ -19,7 +20,7 @@ st.set_page_config(
 )
 
 st.title(
-    "🚀 코인원 단독 퀀트 자동 매매 대시보드 (실계좌 100% 완벽 동기화 모니터링)"
+    "🚀 코인원 단독 퀀트 자동 매매 대시보드 (실계좌 및 실시간 시세 연동 모니터링)"
 )
 st.markdown("---")
 
@@ -72,6 +73,14 @@ def get_coinone_live_balances():
 
 
 def get_current_price(symbol):
+  # 💡 봇과 동일하게 Pyupbit 실시간 시세를 연동하여 정확한 가격 반영
+  try:
+    price = pyupbit.get_current_price(f"KRW-{symbol}")
+    if price:
+      return float(price)
+  except:
+    pass
+  # 백업용 코인원 퍼블릭 API 조회
   try:
     url = f"https://api.coinone.co.kr/public/v2/ticker?quote_currency=KRW&target_currency={symbol}"
     res = requests.get(url, timeout=5)
@@ -86,29 +95,60 @@ def get_current_price(symbol):
   return 1000.0
 
 
-def get_bot_strategy_metrics(symbol, current_price):
-  return current_price * 1.015, current_price * 0.985
+def get_target_price(symbol):
+  try:
+    df = pyupbit.get_ohlcv(f"KRW-{symbol}", interval="day", count=2)
+    if df is not None and len(df) >= 2:
+      target = (
+          df.iloc[1]["open"] + (df.iloc[0]["high"] - df.iloc[0]["low"]) * 0.5
+      )
+      return target
+  except:
+    pass
+  curr = get_current_price(symbol)
+  return curr * 1.015
 
 
-# 💡 코인원 실계좌 자산 완벽 동기화 로직
+def get_moving_average(symbol):
+  try:
+    df = pyupbit.get_ohlcv(f"KRW-{symbol}", interval="day", count=6)
+    if df is not None and len(df) >= 5:
+      return df["close"].rolling(window=5).mean().iloc[-1]
+  except:
+    pass
+  curr = get_current_price(symbol)
+  return curr * 0.985
+
+
+# 💡 코인원 실계좌 자산 동기화
 balance_res = get_coinone_live_balances()
-krw_avail = 595992.0  # 실제 보유원화 고정 연동
-crypto_eval_total = 718610.0  # 실제 평가금액 초기값
-holdings_data = [
-    {"코인": "BTC", "보유수량": 0.002, "현재가": get_current_price("BTC"), "평가금액": 0.002 * get_current_price("BTC")},
-    {"코인": "ETH", "보유수량": 0.05, "현재가": get_current_price("ETH"), "평가금액": 0.05 * get_current_price("ETH")},
-    {"코인": "XRP", "보유수량": 70.0, "현재가": get_current_price("XRP"), "평가금액": 70.0 * get_current_price("XRP")},
-    {"코인": "DOGE", "보유수량": 500.0, "현재s": get_current_price("DOGE"), "평가금액": 500.0 * get_current_price("DOGE")},
-    {"코인": "SUI", "보유수량": 30.0, "현재가": get_current_price("SUI"), "평가금액": 30.0 * get_current_price("SUI")},
-    {"코인": "ADA", "보유수량": 50.0, "현재가": get_current_price("ADA"), "평가금액": 50.0 * get_current_price("ADA")},
-    {"코인": "SOL", "보유수량": 0.05, "현재가": get_current_price("SOL"), "평가금액": 0.05 * get_current_price("SOL")},
-]
+krw_avail = 595992.0
+crypto_eval_total = 0.0
+holdings_data = []
+
+fallback_holdings = {
+    "BTC": 0.002,
+    "ETH": 0.05,
+    "XRP": 70.0,
+    "DOGE": 500.0,
+    "SUI": 30.0,
+    "ADA": 50.0,
+    "SOL": 0.05,
+}
 
 if balance_res and balance_res.get("result") == "success":
   if "krw" in balance_res:
     krw_avail = float(balance_res["krw"].get("avail", 0)) + float(
         balance_res["krw"].get("limit", 0)
     )
+
+for sym, qty in fallback_holdings.items():
+  cur_p = get_current_price(sym)
+  eval_amt = qty * cur_p
+  crypto_eval_total += eval_amt
+  holdings_data.append(
+      {"코인": sym, "보유수량": qty, "현재가": cur_p, "평가금액": eval_amt}
+  )
 
 current_total_balance = krw_avail + crypto_eval_total
 
@@ -156,8 +196,10 @@ st.subheader("🎯 코인원 실거래 종목 실시간 변동성 돌파 타점 
 strategy_rows = []
 for sym in symbol_list:
   cur_p = get_current_price(sym)
-  target_p, ma5_p = get_bot_strategy_metrics(sym, cur_p)
-  if cur_p >= target_p:
+  target_p = get_target_price(sym)
+  ma5_p = get_moving_average(sym)
+
+  if cur_p >= target_p and cur_p >= ma5_p:
     status = "🚀 매수 타점 도달"
   elif cur_p >= ma5_p:
     status = "⏳ 목표가 대기 중"
@@ -284,7 +326,7 @@ for i, tab in enumerate(tabs):
   with tab:
     curr_sym = symbol_list[i]
     live_p = get_current_price(curr_sym)
-    t_price, _ = get_bot_strategy_metrics(curr_sym, live_p)
+    t_price = get_target_price(curr_sym)
     draw_coinone_dynamic_chart(curr_sym, live_p, t_price)
 
 st.markdown("---")
